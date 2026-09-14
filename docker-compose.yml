@@ -3,32 +3,31 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: flight_tracker
     restart: unless-stopped
     ports:
-      - "${PORT:-8000}:8000"
+      - "8000:8000"
     volumes:
-      # Persistent SQLite storage across container recreations on Coolify
+      # Persistent SQLite storage — survives container recreations on Coolify
       - flight_tracker_data:/app/data
     environment:
-      - HOST=0.0.0.0
-      - PORT=8000
-      - DATABASE_URL=sqlite+aiosqlite:///app/data/flights.db
-      - CHECK_INTERVAL_MINUTES=${CHECK_INTERVAL_MINUTES:-60}
-      - RUN_SCRAPE_ON_STARTUP=${RUN_SCRAPE_ON_STARTUP:-true}
-      - TRACK_DATE_MODE=${TRACK_DATE_MODE:-today}
-      - DEFAULT_CURRENCY=${DEFAULT_CURRENCY:-INR}
-      - BRIGHT_DATA_API_KEY=${BRIGHT_DATA_API_KEY:-}
-      - BRIGHT_DATA_ZONE=${BRIGHT_DATA_ZONE:-serp_api1}
-      - BRIGHT_DATA_API_URL=${BRIGHT_DATA_API_URL:-https://api.brightdata.com/request}
-      - BRIGHT_DATA_PROXY_URL=${BRIGHT_DATA_PROXY_URL:-}
+      HOST: "0.0.0.0"
+      PORT: "8000"
+      # 4 slashes = absolute path /app/data/flights.db inside the container
+      DATABASE_URL: "sqlite+aiosqlite:////app/data/flights.db"
+      CHECK_INTERVAL_MINUTES: "${CHECK_INTERVAL_MINUTES:-60}"
+      RUN_SCRAPE_ON_STARTUP: "${RUN_SCRAPE_ON_STARTUP:-true}"
+      TRACK_DATE_MODE: "${TRACK_DATE_MODE:-today}"
+      DEFAULT_CURRENCY: "${DEFAULT_CURRENCY:-INR}"
+      BRIGHT_DATA_API_KEY: "${BRIGHT_DATA_API_KEY:-}"
+      BRIGHT_DATA_ZONE: "${BRIGHT_DATA_ZONE:-serp_api1}"
+      BRIGHT_DATA_API_URL: "${BRIGHT_DATA_API_URL:-https://api.brightdata.com/request}"
+      BRIGHT_DATA_PROXY_URL: "${BRIGHT_DATA_PROXY_URL:-}"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
 
 volumes:
   flight_tracker_data:
-    name: flight_tracker_data
