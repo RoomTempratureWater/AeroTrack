@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AeroTrack — Flight Price Intelligence</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            900: '#0c4a6e',
+                        },
+                        darkBg: '#0b0f19',
+                        darkCard: '#111827',
+                        darkBorder: '#1f293d',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js & Date Adapter -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="bg-darkBg text-slate-100 min-h-screen font-sans antialiased selection:bg-sky-500 selection:text-white">
+
+    <!-- Top Navigation -->
+    <header class="border-b border-darkBorder bg-darkCard/80 backdrop-blur-md sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+                    <i data-lucide="plane" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-lg tracking-tight text-white">AeroTrack</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 font-medium border border-sky-500/20">Google Flights</span>
+                    </div>
+                    <p class="text-xs text-slate-400 hidden sm:block">Hourly Cheapest Fare Monitor & Price Predictor</p>
+                </div>
+            </div>
+
+            <!-- Status & Actions -->
+            <div class="flex items-center gap-3 sm:gap-4">
+                <!-- BrightData Status Pill -->
+                <div id="brightDataPill" class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors bg-slate-800/80 border-slate-700 text-slate-300">
+                    <span id="bdDot" class="h-2 w-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span id="bdText">Checking IP Protection...</span>
+                </div>
+
+                <!-- Manual Trigger Button -->
+                <button id="triggerBtn" onclick="triggerScrape()" class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white text-xs sm:text-sm font-medium transition shadow-md shadow-sky-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i id="triggerIcon" data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span id="triggerLabel">Check Now</span>
+                </button>
+
+                <!-- CSV Export -->
+                <a href="/api/export" download class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-darkBorder hover:border-slate-600 bg-slate-800/60 hover:bg-slate-800 text-slate-300 text-xs sm:text-sm font-medium transition">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span class="hidden md:inline">Export CSV</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+        <!-- Top Banner / System Status Alert -->
+        <div id="statusBanner" class="hidden rounded-xl border p-4 text-xs sm:text-sm flex items-center justify-between transition-all">
+            <div class="flex items-center gap-3">
+                <i id="statusBannerIcon" data-lucide="shield-check" class="w-5 h-5 flex-shrink-0"></i>
+                <span id="statusBannerText"></span>
+            </div>
+            <button onclick="dismissBanner()" class="text-slate-400 hover:text-slate-200">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+
+        <!-- Section 1: Route Quick Cards -->
+        <section>
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-white tracking-tight flex items-center gap-2">
+                        <i data-lucide="compass" class="w-5 h-5 text-sky-400"></i>
+                        Active Tracked Routes
+                    </h2>
+                    <p class="text-xs text-slate-400">Monitoring Hyderabad (HYD), Pune (PNQ), and Mumbai (BOM) routes every hour</p>
+                </div>
+                <div class="text-right">
+                    <span class="text-xs text-slate-400">Next auto-check:</span>
+                    <span id="nextCheckTimer" class="text-xs font-semibold text-sky-400 ml-1">--:--</span>
+                </div>
+            </div>
+
+            <!-- Route Grid -->
+            <div id="routesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Dynamically injected route cards -->
+                <div class="col-span-full py-8 text-center text-slate-500 animate-pulse">Loading tracked routes...</div>
+            </div>
+        </section>
+
+        <!-- Section 2: Interactive Price Graph -->
+        <section class="rounded-2xl border border-darkBorder bg-darkCard p-6 shadow-xl space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-darkBorder/60 pb-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-white tracking-tight flex items-center gap-2">
+                        <i data-lucide="trending-down" class="w-5 h-5 text-emerald-400"></i>
+                        Price Trends & Lowest Fares Over Time
+                    </h2>
+                    <p class="text-xs text-slate-400">Hourly trajectory of the cheapest available ticket for each route</p>
+                </div>
+
+                <!-- Controls: Route Selector & Time Horizon -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <select id="graphRouteFilter" onchange="renderPriceChart()" class="bg-slate-800/80 border border-darkBorder text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-sky-500">
+                        <option value="all">All Routes (Comparison)</option>
+                        <option value="HYD-PNQ">HYD → PNQ (Hyderabad to Pune)</option>
+                        <option value="PNQ-HYD">PNQ → HYD (Pune to Hyderabad)</option>
+                        <option value="BOM-HYD">BOM → HYD (Mumbai to Hyderabad)</option>
+                        <option value="HYD-BOM">HYD → BOM (Hyderabad to Mumbai)</option>
+                    </select>
+
+                    <div class="flex bg-slate-800/80 p-0.5 rounded-lg border border-darkBorder text-xs">
+                        <button onclick="setTimeRange(1)" id="btnRange1" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white transition">24h</button>
+                        <button onclick="setTimeRange(3)" id="btnRange3" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white transition">3d</button>
+                        <button onclick="setTimeRange(7)" id="btnRange7" class="px-2.5 py-1 rounded-md bg-sky-600 text-white font-medium shadow-sm transition">7d</button>
+                        <button onclick="setTimeRange(30)" id="btnRange30" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white transition">30d</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart Container -->
+            <div class="relative h-80 sm:h-96 w-full">
+                <canvas id="priceHistoryChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Section 3: Summary Analytics & Statistics -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="statsGrid">
+            <!-- Stats cards dynamically injected -->
+        </section>
+
+        <!-- Section 4: Detailed Flight Logs Table -->
+        <section class="rounded-2xl border border-darkBorder bg-darkCard overflow-hidden shadow-xl">
+            <div class="p-6 border-b border-darkBorder/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-white tracking-tight flex items-center gap-2">
+                        <i data-lucide="history" class="w-5 h-5 text-indigo-400"></i>
+                        Cheapest Flight Logs
+                    </h2>
+                    <p class="text-xs text-slate-400">Historical records of lowest fares logged during each hourly check</p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <label for="tableRouteFilter" class="text-xs text-slate-400">Route:</label>
+                    <select id="tableRouteFilter" onchange="loadLogs(0)" class="bg-slate-800/80 border border-darkBorder text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-sky-500">
+                        <option value="">All Predefined Routes</option>
+                        <option value="HYD-PNQ">HYD → PNQ</option>
+                        <option value="PNQ-HYD">PNQ → HYD</option>
+                        <option value="BOM-HYD">BOM → HYD</option>
+                        <option value="HYD-BOM">HYD → BOM</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-slate-900/60 text-slate-400 text-xs uppercase tracking-wider border-b border-darkBorder/60">
+                        <tr>
+                            <th class="px-6 py-3.5">Scraped At</th>
+                            <th class="px-6 py-3.5">Route</th>
+                            <th class="px-6 py-3.5">Flight Date & Day</th>
+                            <th class="px-6 py-3.5">Airline & Flight</th>
+                            <th class="px-6 py-3.5">Timing & Duration</th>
+                            <th class="px-6 py-3.5">Cheapest Price</th>
+                            <th class="px-6 py-3.5">Options</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody" class="divide-y divide-darkBorder/40 font-normal">
+                        <tr>
+                            <td colspan="7" class="px-6 py-8 text-center text-slate-500">Loading flight logs...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination Bar -->
+            <div class="px-6 py-4 border-t border-darkBorder/60 flex items-center justify-between text-xs text-slate-400">
+                <span id="paginationInfo">Showing 0 of 0 logs</span>
+                <div class="flex gap-2">
+                    <button id="prevPageBtn" onclick="changePage(-1)" disabled class="px-3 py-1 rounded bg-slate-800 border border-darkBorder text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 transition">Previous</button>
+                    <button id="nextPageBtn" onclick="changePage(1)" disabled class="px-3 py-1 rounded bg-slate-800 border border-darkBorder text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 transition">Next</button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Flight Details Modal -->
+    <div id="detailsModal" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-darkCard border border-darkBorder rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-darkBorder pb-3">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="plane-takeoff" class="w-5 h-5 text-sky-400"></i>
+                    <h3 id="modalTitle" class="font-semibold text-lg text-white">All Flights for Route</h3>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-200">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <div id="modalFlightList" class="overflow-y-auto space-y-3 flex-1 pr-1">
+                <!-- Flight options dynamically rendered here -->
+            </div>
+            
+            <div class="pt-3 border-t border-darkBorder flex justify-end">
+                <button onclick="closeModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Frontend Script -->
+    <script src="/static/js/app.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
