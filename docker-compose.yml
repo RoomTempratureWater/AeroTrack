@@ -4,15 +4,11 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     volumes:
-      # Persistent SQLite storage — survives container recreations on Coolify
       - flight_tracker_data:/app/data
     environment:
       HOST: "0.0.0.0"
       PORT: "8000"
-      # 4 slashes = absolute path /app/data/flights.db inside the container
       DATABASE_URL: "sqlite+aiosqlite:////app/data/flights.db"
       CHECK_INTERVAL_MINUTES: "${CHECK_INTERVAL_MINUTES:-60}"
       RUN_SCRAPE_ON_STARTUP: "${RUN_SCRAPE_ON_STARTUP:-true}"
