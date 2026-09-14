@@ -14,7 +14,7 @@ Self-hosted · Dockerized · Coolify-ready · Bright Data IP Protection
 
 ---
 
-AeroTrack scrapes **Google Flights** every hour using [`AWeirdDev/flights`](https://github.com/AWeirdDev/flights) (`fast-flights`) api and logs the **cheapest available fare** for each tracked route — recording airline, price, timing, duration, stops, and plane type to a local SQLite database. A slick dark-themed dashboard gives you interactive price graphs, route cards, and a full log history.
+AeroTrack scrapes **Google Flights** every hour using [`AWeirdDev/flights`](https://github.com/AWeirdDev/flights) (`fast-flights`) and logs the **cheapest available fare** for each tracked route — recording airline, price, timing, duration, stops, and plane type to a local SQLite database. A slick dark-themed dashboard gives you interactive price graphs, route cards, and a full log history.
 
 ---
 
