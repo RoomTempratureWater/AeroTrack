@@ -139,40 +139,33 @@ async function buildHeroStrip(routes) {
       label: 'Routes Monitored',
       value: routes.length,
       sub: 'active tracking',
-      icon: '🛣️',
       accent: '#38bdf8',
     },
     {
       label: 'Total Records',
       value: statusData.total_records?.toLocaleString() || '—',
       sub: 'price data points',
-      icon: '📊',
       accent: '#a78bfa',
     },
     {
       label: 'Cheapest Ever',
       value: lowestAll ? inr(lowestAll.lowest_ever_price) : '—',
       sub: lowestAll ? lowestAll.code : '—',
-      icon: '💸',
       accent: '#34d399',
     },
     {
       label: 'Scrape Interval',
       value: `${statusData.check_interval_minutes || 60} min`,
-      sub: statusData.is_scraping ? '🔄 scanning now…' : 'auto-scheduled',
-      icon: '⏱️',
+      sub: statusData.is_scraping ? 'scanning now...' : 'auto-scheduled',
       accent: '#fbbf24',
     },
   ];
 
   strip.innerHTML = cards.map(c => `
-    <div class="stat-card flex items-center gap-4">
-      <div class="text-2xl select-none">${c.icon}</div>
-      <div class="min-w-0">
-        <div class="text-[11px] text-slate-500 truncate">${c.label}</div>
-        <div class="text-lg font-bold text-white leading-tight">${c.value}</div>
-        <div class="text-[11px] text-slate-500 truncate">${c.sub}</div>
-      </div>
+    <div class="stat-card">
+      <div class="text-[11px] text-slate-500 truncate mb-1">${c.label}</div>
+      <div class="text-xl font-bold text-white leading-tight">${c.value}</div>
+      <div class="text-[11px] text-slate-500 truncate mt-0.5">${c.sub}</div>
     </div>
   `).join('');
 }
@@ -533,16 +526,17 @@ async function triggerScrape() {
 
   try {
     await fetch('/api/scrape/trigger', { method: 'POST' });
+    showToast('Scrape started — updating in background...', 'info');
     const poll = setInterval(async () => {
       const s = await fetch('/api/status').then(r => r.json());
       if (!s.is_scraping) {
         clearInterval(poll);
         await loadAll();
-        showToast('✅', 'Data refreshed successfully!', 'success');
+        showToast('Data refreshed successfully!', 'success');
       }
     }, 2500);
   } catch (e) {
-    showToast('❌', 'Failed to trigger scrape.', 'error');
+    showToast('Failed to trigger scrape.', 'error');
     btn.disabled = false;
     document.getElementById('triggerIcon').classList.remove('spin');
     document.getElementById('triggerLabel').textContent = 'Refresh';
@@ -553,14 +547,14 @@ async function triggerScrape() {
    TOAST
 ══════════════════════════════════════════════════════════════ */
 let _toastTimeout;
-function showToast(icon, msg, type = 'info') {
+function showToast(msg, type = 'info') {
   const el = document.getElementById('toast');
   const inner = document.getElementById('toastInner');
-  document.getElementById('toastIcon').textContent = icon;
+  document.getElementById('toastIcon').textContent = '';
   document.getElementById('toastMsg').textContent = msg;
 
   const colors = { success: 'border-emerald-500/30 bg-emerald-900/30', error: 'border-rose-500/30 bg-rose-900/30', info: 'border-blue-500/30 bg-blue-900/20' };
-  inner.className = `flex items-center gap-3 px-4 py-3 rounded-xl border shadow-2xl text-sm font-medium backdrop-blur-md text-white ${colors[type] || colors.info}`;
+  inner.className = `flex items-center px-4 py-3 rounded-xl border shadow-2xl text-sm font-medium backdrop-blur-md text-white ${colors[type] || colors.info}`;
 
   el.classList.remove('hidden');
   el.classList.add('toast-show');

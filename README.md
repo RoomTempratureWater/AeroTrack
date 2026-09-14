@@ -1,10 +1,8 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/RoomTempratureWater/AeroTrack/refs/heads/master/assets/banner.svg" alt="AeroTrack Banner" width="100%"/>
+# AeroTrack
 
-# ✈️ AeroTrack
-
-**Hourly Google Flights price intelligence for Indian domestic routes.**  
+**Hourly Google Flights price intelligence for Indian domestic routes.**
 Self-hosted · Dockerized · Coolify-ready · Bright Data IP Protection
 
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white&style=flat-square)](https://python.org)
@@ -20,9 +18,9 @@ AeroTrack scrapes **Google Flights** every hour using [`AWeirdDev/flights`](http
 
 ---
 
-## 📸 Dashboard Preview
+## Dashboard
 
-> *Live data, hourly updates, BrightData IP protection status — all in one view.*
+> Live data, hourly updates, BrightData IP protection status — all in one view.
 
 | Route Cards | Price Chart | Log History |
 |:-----------:|:-----------:|:-----------:|
@@ -30,21 +28,21 @@ AeroTrack scrapes **Google Flights** every hour using [`AWeirdDev/flights`](http
 
 ---
 
-## ✨ Features
+## Features
 
-- **🛣️ 4 Predefined Indian Routes** — HYD↔PNQ, HYD↔BOM (fully configurable)
-- **⏱️ Hourly Automated Scraping** — APScheduler embedded in FastAPI
-- **🛡️ Bright Data IP Protection** — Uses `fast_flights.integrations.BrightData` to route requests through Bright Data's SERP zone; falls back to direct mode gracefully
-- **📊 Interactive Price Chart** — Chart.js powered time-series with route filtering
-- **🗂️ Tabbed Dashboard** — Dashboard / Log History / Analytics views
-- **📋 Full Flight Breakdowns** — Every scrape stores all candidate flights, not just the cheapest
-- **📤 One-Click CSV Export** — Download your entire history as a spreadsheet
-- **🐳 Single Docker Container** — Python 3.12 slim image, SQLite volume, healthcheck
-- **🌐 REST API** — 8 documented endpoints ready for integrations
+- **4 Predefined Indian Routes** — HYD to/from PNQ, HYD to/from BOM (fully configurable)
+- **Hourly Automated Scraping** — APScheduler embedded in FastAPI
+- **Bright Data IP Protection** — Uses `fast_flights.integrations.BrightData` to route requests through Bright Data's SERP zone; falls back to direct mode gracefully
+- **Interactive Price Chart** — Chart.js powered time-series with route filtering
+- **Tabbed Dashboard** — Dashboard / Log History / Analytics views
+- **Full Flight Breakdowns** — Every scrape stores all candidate flights, not just the cheapest
+- **One-Click CSV Export** — Download your entire history as a spreadsheet
+- **Single Docker Container** — Python 3.12 slim image, SQLite volume, healthcheck
+- **REST API** — 8 documented endpoints ready for integrations
 
 ---
 
-## 🚀 Quick Start (Local)
+## Quick Start (Local)
 
 ```bash
 # Clone
@@ -68,13 +66,13 @@ Open **http://localhost:8000** — a scrape will start automatically on launch.
 
 ---
 
-## 🐳 Deploy with Docker
+## Deploy with Docker
 
 ```bash
 docker compose up -d
 ```
 
-That's it. The app starts, initialises the SQLite database, and begins its hourly schedule.
+The app starts, initialises the SQLite database, and begins its hourly schedule.
 
 ```yaml
 # Persistent storage — your data survives container updates
@@ -84,11 +82,11 @@ volumes:
 
 ---
 
-## ☁️ Coolify Deployment
+## Coolify Deployment
 
-1. **Add Resource** → *Git Repository* → point to this repo
-2. **Build Pack** → `Dockerfile`  |  **Port** → `8000`
-3. **Storages** tab → add persistent volume:
+1. **Add Resource** -> Git Repository -> point to this repo
+2. **Build Pack** -> `Dockerfile`  |  **Port** -> `8000`
+3. **Storages** tab -> add persistent volume:
    - Volume name: `flight_tracker_data`
    - Mount path: `/app/data`
 4. **Environment Variables**:
@@ -104,11 +102,11 @@ BRIGHT_DATA_API_KEY=your_key_here
 BRIGHT_DATA_ZONE=serp_api1
 ```
 
-5. **Deploy** → Coolify assigns a domain, healthcheck validates `/health`, you're live.
+5. **Deploy** — Coolify assigns a domain, healthcheck validates `/health`, you're live.
 
 ---
 
-## 🛡️ Bright Data Integration
+## Bright Data Integration
 
 AeroTrack uses the native [`fast_flights.integrations.BrightData`](https://github.com/AWeirdDev/flights#bright-data) integration to protect your IP from Google's rate limiting:
 
@@ -118,16 +116,16 @@ result = get_flights(query, integration=BrightData(api_key="...", zone="serp_api
 ```
 
 **Setup:**
-1. Sign up at [brightdata.com](https://brightdata.com) → create a **SERP API** zone
-2. Copy your API key from *Account Settings → API Keys*
+1. Sign up at [brightdata.com](https://brightdata.com) -> create a **SERP API** zone
+2. Copy your API key from *Account Settings -> API Keys*
 3. Set `BRIGHT_DATA_API_KEY` in your `.env` or Coolify environment variables
-4. The dashboard header shows a green **"BrightData Protected"** pill when active
+4. The dashboard header shows a green **"BrightData Protected"** badge when active
 
 > **No key?** AeroTrack works without Bright Data in direct mode for personal/dev use — the dashboard clearly shows "Direct Mode" status.
 
 ---
 
-## 📡 REST API
+## REST API
 
 | Method | Endpoint | Description |
 |:------:|:---------|:------------|
@@ -143,7 +141,7 @@ result = get_flights(query, integration=BrightData(api_key="...", zone="serp_api
 
 ---
 
-## 🗂️ Project Structure
+## Project Structure
 
 ```
 AeroTrack/
@@ -169,7 +167,7 @@ AeroTrack/
 
 ---
 
-## ⚙️ Configuration Reference
+## Configuration Reference
 
 | Variable | Default | Description |
 |:---------|:--------|:------------|
@@ -185,42 +183,34 @@ AeroTrack/
 
 ---
 
-## 🤝 How It Works
+## How It Works
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    APScheduler (every 60m)                  │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │   app/scraper.py    │
-              │  fast-flights lib   │◄── BrightData zone (optional)
-              │  Google Flights RPC │
-              └──────────┬──────────┘
-                         │  Returns list of flights
-                         ▼
-              ┌─────────────────────┐
-              │  Find cheapest fare │
-              │  Save to SQLite     │
-              └──────────┬──────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │   FastAPI REST API  │◄── Dashboard frontend
-              │   /api/routes       │    Chart.js + Tailwind
-              │   /api/history      │
-              └─────────────────────┘
+APScheduler (every 60m)
+        |
+        v
+  app/scraper.py
+  fast-flights lib  <--  BrightData zone (optional)
+  Google Flights RPC
+        |
+        v  Returns list of flights
+  Find cheapest fare
+  Save to SQLite
+        |
+        v
+  FastAPI REST API  <--  Dashboard frontend
+  /api/routes            Chart.js + Tailwind
+  /api/history
 ```
 
 ---
 
-## 📄 License
+## License
 
 MIT — use freely, self-host forever.
 
 ---
 
 <div align="center">
-Built with ❤️ and ✈️ · Powered by <a href="https://github.com/AWeirdDev/flights">AWeirdDev/flights</a>
+Built with care · Powered by <a href="https://github.com/AWeirdDev/flights">AWeirdDev/flights</a>
 </div>
