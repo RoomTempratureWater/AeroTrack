@@ -1,61 +1,206 @@
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-::-webkit-scrollbar-track {
-    background: #0b0f19;
-}
-::-webkit-scrollbar-thumb {
-    background: #1f293d;
-    border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-    background: #334155;
+/* ══════════════════════════════════════════════════════════════
+   AeroTrack — Global Design Tokens & Utility Classes
+   ══════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background-color: #0a0d14;
+  color: #cbd5e1;
+  font-family: 'Inter', system-ui, sans-serif;
 }
 
-/* Glow & Animation Effects */
-.glow-sky {
-    box-shadow: 0 0 15px -3px rgba(14, 165, 233, 0.25);
+/* ── Scrollbars ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #21283a; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #2d3a52; }
+
+/* ── Glass Card ── */
+.glass-card {
+  background: rgba(13, 17, 23, 0.7);
+  border: 1px solid rgba(33, 40, 58, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-.glow-emerald {
-    box-shadow: 0 0 15px -3px rgba(16, 185, 129, 0.25);
+.glass-card:hover {
+  border-color: rgba(45, 58, 82, 0.9);
 }
 
-/* Airline badge colors */
-.airline-badge-indigo {
-    background-color: rgba(79, 70, 229, 0.15);
-    color: #818cf8;
-    border: 1px solid rgba(79, 70, 229, 0.3);
+/* ── Route Card ── */
+.route-card {
+  background: rgba(13, 17, 23, 0.7);
+  border: 1px solid rgba(33, 40, 58, 0.8);
+  border-radius: 16px;
+  padding: 20px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(12px);
 }
 
-.airline-badge-airindia {
-    background-color: rgba(239, 68, 68, 0.15);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.3);
+.route-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--card-accent, #3b82f6), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
-.airline-badge-alliance {
-    background-color: rgba(245, 158, 11, 0.15);
-    color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.3);
+.route-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(59, 130, 246, 0.1);
 }
 
-.airline-badge-akasa {
-    background-color: rgba(249, 115, 22, 0.15);
-    color: #fb923c;
-    border: 1px solid rgba(249, 115, 22, 0.3);
+.route-card:hover::before { opacity: 1; }
+
+/* ── Primary Button ── */
+.btn-primary {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: #fff;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  transition: all 0.2s ease;
+  box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.airline-badge-spicejet {
-    background-color: rgba(220, 38, 38, 0.15);
-    color: #fca5a5;
-    border: 1px solid rgba(220, 38, 38, 0.3);
+/* ── Ghost Button ── */
+.btn-ghost {
+  background: rgba(33, 40, 58, 0.6);
+  border: 1px solid rgba(33, 40, 58, 0.8);
+  color: #94a3b8;
+  transition: all 0.2s ease;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(45, 58, 82, 0.6);
+  color: #e2e8f0;
 }
 
-.airline-badge-default {
-    background-color: rgba(100, 116, 139, 0.15);
-    color: #94a3b8;
-    border: 1px solid rgba(100, 116, 139, 0.3);
+/* ── Tab pills ── */
+.tab-pill {
+  color: #64748b;
+  transition: all 0.2s ease;
+  font-size: 12px;
+}
+.tab-pill:hover { color: #e2e8f0; }
+.tab-pill.active {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+/* ── Range buttons ── */
+.range-btn { transition: all 0.15s ease; font-size: 11px; font-weight: 500; }
+.range-btn.active { background: #1d4ed8; color: #fff; }
+.range-btn:not(.active):hover { color: #e2e8f0; }
+
+/* ── Select fields ── */
+.select-field {
+  background: rgba(13, 17, 23, 0.8);
+  border: 1px solid rgba(33, 40, 58, 0.8);
+  color: #cbd5e1;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M19 9l-7 7-7-7' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 14px;
+  padding-right: 28px;
+  transition: border-color 0.2s;
+}
+.select-field:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.5);
+}
+.select-field option { background: #0d1117; }
+
+/* ── Airline badges ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.badge-indigo  { background: rgba(99, 102, 241, 0.12); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.25); }
+.badge-air     { background: rgba(239, 68, 68, 0.12);  color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.25); }
+.badge-akasa   { background: rgba(249, 115, 22, 0.12); color: #fdba74; border: 1px solid rgba(249, 115, 22, 0.25); }
+.badge-spice   { background: rgba(220, 38, 38, 0.12);  color: #fca5a5; border: 1px solid rgba(220, 38, 38, 0.25); }
+.badge-vistara { background: rgba(139, 92, 246, 0.12); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.25); }
+.badge-default { background: rgba(100, 116, 139, 0.12); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.25); }
+
+/* ── Price change chips ── */
+.chip-drop { background: rgba(16, 185, 129, 0.1); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 9999px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+.chip-rise { background: rgba(239, 68, 68, 0.1); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 9999px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+.chip-flat { background: rgba(100, 116, 139, 0.1); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.2); border-radius: 9999px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+
+/* ── Hero stat cards ── */
+.stat-card {
+  background: rgba(13, 17, 23, 0.7);
+  border: 1px solid rgba(33, 40, 58, 0.8);
+  border-radius: 14px;
+  padding: 16px 20px;
+  backdrop-filter: blur(12px);
+}
+
+/* ── Shimmer loading ── */
+.shimmer {
+  background: linear-gradient(90deg, #161b27 25%, #1c2333 50%, #161b27 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+  border-radius: 8px;
+}
+
+/* ── Divider line ── */
+.divider { border-color: rgba(33, 40, 58, 0.6); }
+
+/* ── Flight option row in modal ── */
+.flight-option {
+  border: 1px solid rgba(33, 40, 58, 0.8);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: border-color 0.2s;
+}
+.flight-option:hover { border-color: rgba(59, 130, 246, 0.3); }
+.flight-option.cheapest {
+  background: rgba(59, 130, 246, 0.06);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+/* ── Toast ── */
+.toast-show { animation: toastIn 0.3s ease forwards; }
+.toast-hide { animation: toastOut 0.3s ease forwards; }
+
+@keyframes toastIn  { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toastOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(12px); } }
+
+/* ── Spinning icon ── */
+.spin { animation: spin 0.8s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ── Hover table row ── */
+tbody tr:hover { background: rgba(33, 40, 58, 0.3); }
+
+/* ── Chart tooltips override ── */
+.chartjs-tooltip {
+  border-radius: 10px !important;
+  border: 1px solid rgba(33, 40, 58, 0.8) !important;
 }

@@ -1,520 +1,572 @@
-// State
-let priceChart = null;
+// ══════════════════════════════════════════════════════════════
+//  AeroTrack — Frontend Application Logic
+// ══════════════════════════════════════════════════════════════
+
+/* ── State ── */
+let chart = null;
 let currentDays = 7;
 let currentPage = 0;
-const pageSize = 20;
-let routeColors = {
-    "HYD-PNQ": { border: "#38bdf8", bg: "rgba(56, 189, 248, 0.1)" },
-    "PNQ-HYD": { border: "#a855f7", bg: "rgba(168, 85, 247, 0.1)" },
-    "BOM-HYD": { border: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)" },
-    "HYD-BOM": { border: "#10b981", bg: "rgba(16, 185, 129, 0.1)" },
+const PAGE_SIZE = 20;
+let allLogsCache = [];
+let rawHistory = null;
+
+const ROUTE_COLORS = {
+  'HYD-PNQ': { line: '#38bdf8', fill: 'rgba(56,189,248,0.08)', label: 'HYD→PNQ' },
+  'PNQ-HYD': { line: '#a78bfa', fill: 'rgba(167,139,250,0.08)', label: 'PNQ→HYD' },
+  'BOM-HYD': { line: '#fbbf24', fill: 'rgba(251,191,36,0.08)',  label: 'BOM→HYD' },
+  'HYD-BOM': { line: '#34d399', fill: 'rgba(52,211,153,0.08)',  label: 'HYD→BOM' },
 };
 
-let rawChartData = null;
-let allLogsData = [];
-
-// Initialize on DOM load
-document.addEventListener("DOMContentLoaded", () => {
-    initChart();
-    loadDashboard();
-    
-    // Auto-refresh every 20 seconds
-    setInterval(loadStatus, 20000);
+/* ══════════════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  initChart();
+  loadAll();
+  setInterval(loadStatus, 15000);
 });
 
-// Format Indian Rupee currency
-function formatINR(val) {
-    if (val === null || val === undefined) return "N/A";
-    return "₹" + Number(val).toLocaleString("en-IN");
+async function loadAll() {
+  await Promise.all([
+    loadStatus(),
+    loadRoutes(),
+    loadHistory(),
+    loadStats(),
+    loadLogs(0),
+  ]);
 }
 
-// Format duration minutes to "1h 25m"
-function formatDuration(mins) {
-    if (!mins) return "-";
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return h > 0 ? `${h}h ${m > 0 ? m + 'm' : ''}` : `${m}m`;
+/* ══════════════════════════════════════════════════════════════
+   TABS
+══════════════════════════════════════════════════════════════ */
+function showTab(name) {
+  ['dashboard','logs','stats'].forEach(t => {
+    document.getElementById(`tab-content-${t}`).classList.toggle('hidden', t !== name);
+    document.getElementById(`tab-${t}`).classList.toggle('active', t === name);
+  });
 }
 
-// Format Airline Badge Class
-function getAirlineBadgeClass(airline) {
-    const name = (airline || "").toLowerCase();
-    if (name.includes("indigo")) return "airline-badge-indigo";
-    if (name.includes("air india")) return "airline-badge-airindia";
-    if (name.includes("alliance")) return "airline-badge-alliance";
-    if (name.includes("akasa")) return "airline-badge-akasa";
-    if (name.includes("spicejet")) return "airline-badge-spicejet";
-    return "airline-badge-default";
+/* ══════════════════════════════════════════════════════════════
+   FORMATTERS
+══════════════════════════════════════════════════════════════ */
+function inr(v)   { return v != null ? '₹' + Number(v).toLocaleString('en-IN') : '—'; }
+function dur(m)   { if (!m) return '—'; const h = Math.floor(m/60), r = m%60; return h ? `${h}h ${r ? r+'m':''}`.trim() : `${r}m`; }
+function fmtTime(ts) {
+  return new Date(ts).toLocaleString('en-IN', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:true });
 }
 
-// Load full dashboard data
-async function loadDashboard() {
-    await Promise.all([
-        loadStatus(),
-        loadRoutes(),
-        loadChartData(),
-        loadStats(),
-        loadLogs(0)
-    ]);
+function airlineBadge(name) {
+  const n = (name||'').toLowerCase();
+  if (n.includes('indigo'))    return `<span class="badge badge-indigo">✈ ${name}</span>`;
+  if (n.includes('air india')) return `<span class="badge badge-air">✈ ${name}</span>`;
+  if (n.includes('akasa'))     return `<span class="badge badge-akasa">✈ ${name}</span>`;
+  if (n.includes('spicejet'))  return `<span class="badge badge-spice">✈ ${name}</span>`;
+  if (n.includes('vistara'))   return `<span class="badge badge-vistara">✈ ${name}</span>`;
+  return `<span class="badge badge-default">✈ ${name||'Unknown'}</span>`;
 }
 
-// Load System & BrightData Status
+function diffChip(d) {
+  if (d == null) return '';
+  if (d < 0) return `<span class="chip-drop">↓ ${inr(Math.abs(d))}</span>`;
+  if (d > 0) return `<span class="chip-rise">↑ +${inr(d)}</span>`;
+  return `<span class="chip-flat">→ No change</span>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   STATUS
+══════════════════════════════════════════════════════════════ */
 async function loadStatus() {
-    try {
-        const res = await fetch("/api/status");
-        const data = await res.json();
+  try {
+    const d = await fetch('/api/status').then(r => r.json());
 
-        // Update BrightData indicator
-        const bdPill = document.getElementById("brightDataPill");
-        const bdDot = document.getElementById("bdDot");
-        const bdText = document.getElementById("bdText");
-
-        if (data.brightdata && data.brightdata.active) {
-            bdPill.className = "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border bg-emerald-500/10 border-emerald-500/30 text-emerald-300";
-            bdDot.className = "h-2 w-2 rounded-full bg-emerald-400";
-            bdText.textContent = `BrightData Protected (${data.brightdata.zone || data.brightdata.mode})`;
-        } else {
-            bdPill.className = "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border bg-amber-500/10 border-amber-500/30 text-amber-300";
-            bdDot.className = "h-2 w-2 rounded-full bg-amber-400";
-            bdText.textContent = "Direct Mode (No BrightData Key)";
-        }
-
-        // Update Trigger Button State
-        const btn = document.getElementById("triggerBtn");
-        const icon = document.getElementById("triggerIcon");
-        const label = document.getElementById("triggerLabel");
-
-        if (data.is_scraping) {
-            btn.disabled = true;
-            icon.classList.add("animate-spin");
-            label.textContent = "Scraping...";
-        } else {
-            btn.disabled = false;
-            icon.classList.remove("animate-spin");
-            label.textContent = "Check Now";
-        }
-
-        // Update Next Run Timer
-        if (data.next_run_at) {
-            const nextTime = new Date(data.next_run_at);
-            const now = new Date();
-            const diffMins = Math.max(0, Math.round((nextTime - now) / 60000));
-            document.getElementById("nextCheckTimer").textContent = `in ~${diffMins} min${diffMins === 1 ? '' : 's'}`;
-        } else {
-            document.getElementById("nextCheckTimer").textContent = "Idle";
-        }
-
-    } catch (err) {
-        console.error("Failed to load status:", err);
-    }
-}
-
-// Load Route Cards
-async function loadRoutes() {
-    try {
-        const res = await fetch("/api/routes");
-        const routes = await res.json();
-        const grid = document.getElementById("routesGrid");
-        grid.innerHTML = "";
-
-        routes.forEach(r => {
-            const latest = r.latest;
-            const hasData = !!latest;
-            const diff = r.price_diff_vs_previous;
-            let trendHtml = "";
-
-            if (diff !== null && diff !== undefined) {
-                if (diff < 0) {
-                    trendHtml = `<span class="text-xs text-emerald-400 flex items-center font-medium">↓ ${formatINR(Math.abs(diff))} drop</span>`;
-                } else if (diff > 0) {
-                    trendHtml = `<span class="text-xs text-rose-400 flex items-center font-medium">↑ +${formatINR(diff)} rise</span>`;
-                } else {
-                    trendHtml = `<span class="text-xs text-slate-400">No change</span>`;
-                }
-            }
-
-            const card = document.createElement("div");
-            card.className = "rounded-xl border border-darkBorder bg-darkCard/70 p-5 shadow-lg hover:border-slate-600 transition-all flex flex-col justify-between";
-
-            card.innerHTML = `
-                <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-800 text-sky-400 border border-darkBorder">${r.code}</span>
-                        ${trendHtml}
-                    </div>
-                    <div class="flex items-center gap-1.5 font-semibold text-white text-sm mb-3">
-                        <span>${r.origin}</span>
-                        <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-400"></i>
-                        <span>${r.destination}</span>
-                    </div>
-
-                    ${hasData ? `
-                        <div class="space-y-2">
-                            <div class="flex items-baseline justify-between">
-                                <span class="text-2xl font-bold tracking-tight text-white">${formatINR(latest.price)}</span>
-                                <span class="text-[11px] px-2 py-0.5 rounded font-medium ${getAirlineBadgeClass(latest.airline)}">
-                                    ${latest.airline}
-                                </span>
-                            </div>
-
-                            <div class="text-xs text-slate-400 flex items-center justify-between pt-1 border-t border-darkBorder/40">
-                                <span class="flex items-center gap-1">
-                                    <i data-lucide="clock" class="w-3 h-3 text-slate-500"></i>
-                                    ${latest.departure_time} → ${latest.arrival_time}
-                                </span>
-                                <span>${formatDuration(latest.duration_minutes)}</span>
-                            </div>
-                        </div>
-                    ` : `
-                        <div class="py-4 text-center text-xs text-slate-500">
-                            No price logged yet.<br>Click "Check Now" to fetch.
-                        </div>
-                    `}
-                </div>
-
-                <div class="mt-4 pt-3 border-t border-darkBorder/60 flex items-center justify-between text-[11px] text-slate-400">
-                    <span>Low: <strong class="text-emerald-400 font-semibold">${formatINR(r.lowest_ever_price)}</strong></span>
-                    <span>${hasData ? new Date(latest.scrape_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
-                </div>
-            `;
-
-            grid.appendChild(card);
-        });
-
-        lucide.createIcons();
-    } catch (err) {
-        console.error("Failed to load routes:", err);
-    }
-}
-
-// Initialize Chart.js
-function initChart() {
-    const ctx = document.getElementById("priceHistoryChart").getContext("2d");
-
-    priceChart = new Chart(ctx, {
-        type: "line",
-        data: {
-            datasets: []
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: "nearest",
-                intersect: false,
-            },
-            scales: {
-                x: {
-                    type: "time",
-                    time: {
-                        unit: "hour",
-                        tooltipFormat: "MMM d, HH:mm",
-                        displayFormats: {
-                            hour: "MMM d, HH:mm",
-                            day: "MMM d"
-                        }
-                    },
-                    grid: {
-                        color: "rgba(255, 255, 255, 0.05)"
-                    },
-                    ticks: {
-                        color: "#94a3b8",
-                        font: { size: 11 }
-                    }
-                },
-                y: {
-                    grid: {
-                        color: "rgba(255, 255, 255, 0.05)"
-                    },
-                    ticks: {
-                        color: "#94a3b8",
-                        font: { size: 11 },
-                        callback: function(value) {
-                            return "₹" + value.toLocaleString("en-IN");
-                        }
-                    }
-                }
-            },
-            plugins: {
-                legend: {
-                    position: "top",
-                    labels: {
-                        color: "#e2e8f0",
-                        font: { size: 12, weight: 500 },
-                        usePointStyle: true,
-                        pointStyle: "circle"
-                    }
-                },
-                tooltip: {
-                    backgroundColor: "#111827",
-                    borderColor: "#334155",
-                    borderWidth: 1,
-                    titleColor: "#f8fafc",
-                    bodyColor: "#cbd5e1",
-                    padding: 10,
-                    callbacks: {
-                        label: function(context) {
-                            const raw = context.raw;
-                            return ` ₹${raw.y.toLocaleString('en-IN')} (${raw.airline} ${raw.departure_time || ''})`;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-// Load and Render Price Chart
-async function loadChartData() {
-    try {
-        const res = await fetch(`/api/history?days=${currentDays}`);
-        rawChartData = await res.json();
-        renderPriceChart();
-    } catch (err) {
-        console.error("Failed to load chart data:", err);
-    }
-}
-
-function renderPriceChart() {
-    if (!rawChartData || !priceChart) return;
-
-    const selectedFilter = document.getElementById("graphRouteFilter").value;
-    const datasets = [];
-
-    for (const [routeCode, items] of Object.entries(rawChartData.routes)) {
-        if (selectedFilter !== "all" && selectedFilter !== routeCode) {
-            continue;
-        }
-
-        const color = routeColors[routeCode] || { border: "#38bdf8", bg: "rgba(56, 189, 248, 0.1)" };
-
-        const points = items.map(pt => ({
-            x: new Date(pt.timestamp),
-            y: pt.price,
-            airline: pt.airline,
-            departure_time: pt.departure_time,
-            flight_date: pt.flight_date,
-            flight_number: pt.flight_number
-        }));
-
-        datasets.push({
-            label: routeCode,
-            data: points,
-            borderColor: color.border,
-            backgroundColor: color.bg,
-            borderWidth: 2.5,
-            tension: 0.3,
-            fill: false,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            pointBackgroundColor: color.border
-        });
-    }
-
-    priceChart.data.datasets = datasets;
-    priceChart.update();
-}
-
-function setTimeRange(days) {
-    currentDays = days;
-    [1, 3, 7, 30].forEach(d => {
-        const btn = document.getElementById(`btnRange${d}`);
-        if (btn) {
-            if (d === days) {
-                btn.className = "px-2.5 py-1 rounded-md bg-sky-600 text-white font-medium shadow-sm transition";
-            } else {
-                btn.className = "px-2.5 py-1 rounded-md text-slate-400 hover:text-white transition";
-            }
-        }
-    });
-    loadChartData();
-}
-
-// Load Stats Section
-async function loadStats() {
-    try {
-        const res = await fetch("/api/stats");
-        const stats = await res.json();
-        const grid = document.getElementById("statsGrid");
-        grid.innerHTML = "";
-
-        stats.forEach(s => {
-            const card = document.createElement("div");
-            card.className = "rounded-xl border border-darkBorder bg-darkCard/60 p-4";
-            card.innerHTML = `
-                <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
-                    <span>${s.route_code}</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800">${s.total_checks} logs</span>
-                </div>
-                <div class="text-xl font-bold text-white mb-2">
-                    ${formatINR(s.min_price)} <span class="text-xs font-normal text-slate-400">low</span>
-                </div>
-                <div class="flex justify-between text-[11px] text-slate-400 border-t border-darkBorder/40 pt-2">
-                    <span>Avg: <strong class="text-slate-200">${formatINR(s.avg_price)}</strong></span>
-                    <span>Top: <strong class="text-sky-400">${s.most_common_airline}</strong></span>
-                </div>
-            `;
-            grid.appendChild(card);
-        });
-    } catch (err) {
-        console.error("Failed to load stats:", err);
-    }
-}
-
-// Load Detailed Flight Logs Table
-async function loadLogs(page = 0) {
-    currentPage = page;
-    const routeFilter = document.getElementById("tableRouteFilter").value;
-    const offset = page * pageSize;
-
-    try {
-        const url = `/api/logs?limit=${pageSize}&offset=${offset}${routeFilter ? '&route_code=' + routeFilter : ''}`;
-        const res = await fetch(url);
-        const data = await res.json();
-        allLogsData = data.items;
-
-        const tbody = document.getElementById("logsTableBody");
-        tbody.innerHTML = "";
-
-        if (data.items.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-8 text-center text-slate-500">No logs found matching criteria.</td></tr>`;
-            document.getElementById("paginationInfo").textContent = "Showing 0 of 0 logs";
-            document.getElementById("prevPageBtn").disabled = true;
-            document.getElementById("nextPageBtn").disabled = true;
-            return;
-        }
-
-        data.items.forEach(log => {
-            const row = document.createElement("tr");
-            row.className = "hover:bg-slate-800/40 transition";
-
-            const scrapeDate = new Date(log.scrape_timestamp).toLocaleString([], {
-                month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
-            });
-
-            row.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-xs text-slate-400">${scrapeDate}</td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-800 text-sky-400 border border-darkBorder">${log.route_code}</span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-xs">
-                    <div class="text-slate-200 font-medium">${log.flight_date}</div>
-                    <div class="text-slate-400 text-[11px]">${log.day_of_week}</div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-xs">
-                    <span class="px-2 py-0.5 rounded font-medium ${getAirlineBadgeClass(log.airline)}">${log.airline}</span>
-                    ${log.flight_number ? `<span class="ml-1 text-[11px] text-slate-400">${log.flight_number}</span>` : ''}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-xs text-slate-300">
-                    <div>${log.departure_time} → ${log.arrival_time}</div>
-                    <div class="text-[11px] text-slate-400">${formatDuration(log.duration_minutes)} • ${log.stops === 0 ? 'Non-stop' : log.stops + ' stop(s)'}</div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="text-sm font-bold text-white">${formatINR(log.price)}</span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-xs">
-                    <button onclick="viewOptions(${log.id})" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 text-xs font-medium border border-darkBorder transition flex items-center gap-1">
-                        <span>${log.total_options_found} flights</span>
-                        <i data-lucide="chevron-right" class="w-3 h-3"></i>
-                    </button>
-                </td>
-            `;
-
-            tbody.appendChild(row);
-        });
-
-        // Update pagination
-        const total = data.total;
-        const start = offset + 1;
-        const end = Math.min(offset + pageSize, total);
-        document.getElementById("paginationInfo").textContent = `Showing ${start}–${end} of ${total} logs`;
-        document.getElementById("prevPageBtn").disabled = page <= 0;
-        document.getElementById("nextPageBtn").disabled = end >= total;
-
-        lucide.createIcons();
-    } catch (err) {
-        console.error("Failed to load logs:", err);
-    }
-}
-
-function changePage(delta) {
-    loadLogs(currentPage + delta);
-}
-
-// Trigger Scrape Manually
-async function triggerScrape() {
-    const btn = document.getElementById("triggerBtn");
-    const icon = document.getElementById("triggerIcon");
-    const label = document.getElementById("triggerLabel");
-
-    btn.disabled = true;
-    icon.classList.add("animate-spin");
-    label.textContent = "Starting...";
-
-    try {
-        const res = await fetch("/api/scrape/trigger", { method: "POST" });
-        const data = await res.json();
-        
-        // Poll status every 2 seconds until scraping is done
-        const checkInterval = setInterval(async () => {
-            const statusRes = await fetch("/api/status");
-            const statusData = await statusRes.json();
-            if (!statusData.is_scraping) {
-                clearInterval(checkInterval);
-                await loadDashboard();
-            }
-        }, 2000);
-    } catch (err) {
-        console.error("Error triggering scrape:", err);
-        btn.disabled = false;
-        icon.classList.remove("animate-spin");
-        label.textContent = "Check Now";
-    }
-}
-
-// Modal: View all flight options for a log entry
-function viewOptions(logId) {
-    const log = allLogsData.find(l => l.id === logId);
-    if (!log) return;
-
-    document.getElementById("modalTitle").textContent = `${log.route_code} — Options on ${log.flight_date} (${log.day_of_week})`;
-    const list = document.getElementById("modalFlightList");
-    list.innerHTML = "";
-
-    const allFlights = log.all_flights || [];
-
-    if (allFlights.length === 0) {
-        list.innerHTML = `<div class="text-center text-slate-500 py-6 text-xs">No additional flight breakdown available for this log.</div>`;
+    /* BrightData badge */
+    const bd = document.getElementById('bdBadge');
+    const dot = document.getElementById('bdDot');
+    const lbl = document.getElementById('bdLabel');
+    bd.classList.remove('hidden');
+    if (d.brightdata?.active) {
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400';
+      lbl.textContent = `BrightData · ${d.brightdata.zone || d.brightdata.mode}`;
+      bd.className = 'hidden sm:flex items-center gap-1.5 text-[11px] font-medium px-3 py-1 rounded-full border bg-emerald-500/10 border-emerald-500/25 text-emerald-300';
     } else {
-        // Sort lowest price first
-        allFlights.sort((a, b) => a.price - b.price);
-
-        allFlights.forEach((fl, idx) => {
-            const isLowest = idx === 0;
-            const item = document.createElement("div");
-            item.className = `p-3 rounded-xl border ${isLowest ? 'border-sky-500/50 bg-sky-500/5' : 'border-darkBorder bg-slate-900/40'} flex items-center justify-between text-xs`;
-
-            item.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <span class="px-2 py-0.5 rounded font-medium ${getAirlineBadgeClass(fl.airline)}">${fl.airline}</span>
-                    <div>
-                        <div class="text-slate-200 font-medium">${fl.departure_time} → ${fl.arrival_time}</div>
-                        <div class="text-[11px] text-slate-400">${formatDuration(fl.duration_minutes)} • ${fl.stops === 0 ? 'Non-stop' : fl.stops + ' stop(s)'} ${fl.plane_type ? '• ' + fl.plane_type : ''}</div>
-                    </div>
-                </div>
-                <div class="text-right">
-                    <div class="text-sm font-bold ${isLowest ? 'text-emerald-400' : 'text-white'}">${formatINR(fl.price)}</div>
-                    ${isLowest ? '<span class="text-[10px] text-emerald-400 font-medium">Cheapest</span>' : ''}
-                </div>
-            `;
-            list.appendChild(item);
-        });
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse-slow';
+      lbl.textContent = 'Direct Mode';
+      bd.className = 'hidden sm:flex items-center gap-1.5 text-[11px] font-medium px-3 py-1 rounded-full border bg-yellow-500/10 border-yellow-500/25 text-yellow-300';
     }
 
-    document.getElementById("detailsModal").classList.remove("hidden");
-    lucide.createIcons();
+    /* Trigger button */
+    const btn = document.getElementById('triggerBtn');
+    const icon = document.getElementById('triggerIcon');
+    const lbtn = document.getElementById('triggerLabel');
+    if (d.is_scraping) {
+      btn.disabled = true;
+      icon.classList.add('spin');
+      lbtn.textContent = 'Scraping…';
+    } else {
+      btn.disabled = false;
+      icon.classList.remove('spin');
+      lbtn.textContent = 'Refresh';
+    }
+
+    /* Next check countdown */
+    if (d.next_run_at) {
+      const diff = Math.max(0, Math.round((new Date(d.next_run_at) - Date.now()) / 60000));
+      document.getElementById('nextCheck').textContent = `~${diff}m`;
+    }
+  } catch {}
 }
 
-function closeModal() {
-    document.getElementById("detailsModal").classList.add("hidden");
+/* ══════════════════════════════════════════════════════════════
+   HERO STRIP (stat cards at top)
+══════════════════════════════════════════════════════════════ */
+async function buildHeroStrip(routes) {
+  const strip = document.getElementById('heroStrip');
+  const totalChecks = routes.reduce((a, r) => {
+    // We'll fetch stats separately, just show route count for now
+    return a;
+  }, 0);
+
+  // Pull latest scrape summary from /api/status
+  let statusData = {};
+  try { statusData = await fetch('/api/status').then(r => r.json()); } catch {}
+
+  const lowestAll = routes
+    .filter(r => r.lowest_ever_price)
+    .sort((a, b) => a.lowest_ever_price - b.lowest_ever_price)[0];
+
+  const cards = [
+    {
+      label: 'Routes Monitored',
+      value: routes.length,
+      sub: 'active tracking',
+      icon: '🛣️',
+      accent: '#38bdf8',
+    },
+    {
+      label: 'Total Records',
+      value: statusData.total_records?.toLocaleString() || '—',
+      sub: 'price data points',
+      icon: '📊',
+      accent: '#a78bfa',
+    },
+    {
+      label: 'Cheapest Ever',
+      value: lowestAll ? inr(lowestAll.lowest_ever_price) : '—',
+      sub: lowestAll ? lowestAll.code : '—',
+      icon: '💸',
+      accent: '#34d399',
+    },
+    {
+      label: 'Scrape Interval',
+      value: `${statusData.check_interval_minutes || 60} min`,
+      sub: statusData.is_scraping ? '🔄 scanning now…' : 'auto-scheduled',
+      icon: '⏱️',
+      accent: '#fbbf24',
+    },
+  ];
+
+  strip.innerHTML = cards.map(c => `
+    <div class="stat-card flex items-center gap-4">
+      <div class="text-2xl select-none">${c.icon}</div>
+      <div class="min-w-0">
+        <div class="text-[11px] text-slate-500 truncate">${c.label}</div>
+        <div class="text-lg font-bold text-white leading-tight">${c.value}</div>
+        <div class="text-[11px] text-slate-500 truncate">${c.sub}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ROUTE CARDS
+══════════════════════════════════════════════════════════════ */
+async function loadRoutes() {
+  try {
+    const routes = await fetch('/api/routes').then(r => r.json());
+    await buildHeroStrip(routes);
+    renderRouteCards(routes);
+  } catch (e) {
+    document.getElementById('routesGrid').innerHTML =
+      `<div class="col-span-full text-center py-10 text-slate-500 text-sm">Failed to load routes: ${e.message}</div>`;
+  }
+}
+
+function renderRouteCards(routes) {
+  const grid = document.getElementById('routesGrid');
+  const colors = {
+    'HYD-PNQ': '#38bdf8',
+    'PNQ-HYD': '#a78bfa',
+    'BOM-HYD': '#fbbf24',
+    'HYD-BOM': '#34d399',
+  };
+
+  grid.innerHTML = routes.map(r => {
+    const L = r.latest;
+    const c = colors[r.code] || '#3b82f6';
+
+    return `
+      <div class="route-card" style="--card-accent:${c}">
+        <!-- Header row -->
+        <div class="flex items-start justify-between mb-4">
+          <div>
+            <div class="text-[11px] text-slate-500 font-mono mb-1">${r.code}</div>
+            <div class="flex items-center gap-1.5 text-sm font-semibold text-white">
+              <span>${r.origin}</span>
+              <svg class="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path d="M14 5l7 7-7 7M3 12h18" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>${r.destination}</span>
+            </div>
+          </div>
+          ${L ? diffChip(r.price_diff_vs_previous) : ''}
+        </div>
+
+        <!-- Price block -->
+        ${L ? `
+          <div class="mb-4">
+            <div class="text-2xl font-extrabold text-white tracking-tight">${inr(L.price)}</div>
+            <div class="mt-1">${airlineBadge(L.airline)}</div>
+          </div>
+
+          <div class="space-y-1.5 text-[12px] text-slate-400">
+            <div class="flex items-center justify-between">
+              <span class="flex items-center gap-1">
+                <svg class="w-3 h-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/>
+                </svg>
+                ${L.departure_time} → ${L.arrival_time}
+              </span>
+              <span class="text-slate-500">${dur(L.duration_minutes)}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-slate-500">${L.stops === 0 ? 'Non-stop' : `${L.stops} stop(s)`}</span>
+              <span class="text-slate-600 text-[10px]">${fmtTime(L.scrape_timestamp)}</span>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-border/60 flex items-center justify-between">
+            <div class="text-[11px] text-slate-500">
+              All-time low: <span class="text-emerald-400 font-semibold">${inr(r.lowest_ever_price)}</span>
+            </div>
+            <div class="w-2 h-2 rounded-full" style="background:${c}; box-shadow: 0 0 6px ${c};"></div>
+          </div>
+        ` : `
+          <div class="py-8 text-center text-slate-600 text-xs">
+            No data yet — click Refresh to fetch
+          </div>
+        `}
+      </div>
+    `;
+  }).join('');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CHART
+══════════════════════════════════════════════════════════════ */
+function initChart() {
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: [] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: false, axis: 'x' },
+      scales: {
+        x: {
+          type: 'time',
+          time: {
+            unit: 'hour',
+            tooltipFormat: 'MMM d, HH:mm',
+            displayFormats: { hour: 'MMM d, HH:mm', day: 'MMM d' }
+          },
+          grid: { color: 'rgba(33,40,58,0.5)', drawBorder: false },
+          ticks: { color: '#475569', font: { size: 11 }, maxTicksLimit: 8 }
+        },
+        y: {
+          grid: { color: 'rgba(33,40,58,0.5)', drawBorder: false },
+          ticks: {
+            color: '#475569', font: { size: 11 },
+            callback: v => '₹' + Number(v).toLocaleString('en-IN')
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            color: '#94a3b8', font: { size: 12, weight: '500' },
+            usePointStyle: true, pointStyle: 'circle', padding: 20
+          }
+        },
+        tooltip: {
+          backgroundColor: '#0d1117',
+          borderColor: '#21283a',
+          borderWidth: 1,
+          titleColor: '#f1f5f9',
+          bodyColor: '#94a3b8',
+          padding: 12,
+          callbacks: {
+            label: ctx => {
+              const r = ctx.raw;
+              return ` ${inr(r.y)} · ${r.airline || ''} ${r.departure_time || ''}`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+async function loadHistory() {
+  try {
+    rawHistory = await fetch(`/api/history?days=${currentDays}`).then(r => r.json());
+    renderChart();
+  } catch {}
+}
+
+function renderChart() {
+  if (!rawHistory || !chart) return;
+  const filter = document.getElementById('graphRouteFilter').value;
+
+  const datasets = Object.entries(rawHistory.routes)
+    .filter(([code]) => filter === 'all' || filter === code)
+    .map(([code, pts]) => {
+      const c = ROUTE_COLORS[code] || { line: '#3b82f6', fill: 'rgba(59,130,246,0.08)', label: code };
+      return {
+        label: c.label,
+        data: pts.map(p => ({
+          x: new Date(p.timestamp),
+          y: p.price,
+          airline: p.airline,
+          departure_time: p.departure_time,
+        })),
+        borderColor: c.line,
+        backgroundColor: c.fill,
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        pointBackgroundColor: c.line,
+        pointBorderColor: '#0d1117',
+        pointBorderWidth: 2,
+      };
+    });
+
+  chart.data.datasets = datasets;
+  chart.update();
+}
+
+function setRange(d) {
+  currentDays = d;
+  [1,3,7,30].forEach(n => {
+    const b = document.getElementById(`r${n}`);
+    if (b) b.classList.toggle('active', n === d);
+  });
+  loadHistory();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   STATS
+══════════════════════════════════════════════════════════════ */
+async function loadStats() {
+  try {
+    const stats = await fetch('/api/stats').then(r => r.json());
+    const colors = ['#38bdf8','#a78bfa','#fbbf24','#34d399'];
+    document.getElementById('statsGrid').innerHTML = stats.map((s, i) => `
+      <div class="glass-card rounded-2xl p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="text-[11px] font-mono font-bold text-slate-500">${s.route_code}</div>
+          <div class="text-[11px] px-2 py-0.5 rounded-full bg-surface-3 text-slate-500 border border-border">${s.total_checks} logs</div>
+        </div>
+
+        <div>
+          <div class="text-2xl font-extrabold text-white">${inr(s.min_price)}</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">all-time lowest</div>
+        </div>
+
+        <div class="space-y-2 text-[12px]">
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">Average</span>
+            <span class="font-semibold text-slate-200">${inr(s.avg_price)}</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">Highest seen</span>
+            <span class="font-semibold text-rose-400">${inr(s.max_price)}</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">Top carrier</span>
+            <span>${airlineBadge(s.most_common_airline)}</span>
+          </div>
+        </div>
+
+        <!-- Mini progress bar: min vs max spread -->
+        <div>
+          <div class="flex justify-between text-[10px] text-slate-600 mb-1">
+            <span>Price range</span>
+            <span>${inr(s.min_price)} – ${inr(s.max_price)}</span>
+          </div>
+          <div class="h-1 rounded-full bg-surface-3 overflow-hidden">
+            <div class="h-full rounded-full" style="width:${s.max_price ? Math.round((s.avg_price/s.max_price)*100) : 50}%; background:${colors[i]};"></div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch {}
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LOGS TABLE
+══════════════════════════════════════════════════════════════ */
+async function loadLogs(page = 0) {
+  currentPage = page;
+  const filter = document.getElementById('tableRouteFilter')?.value || '';
+  const offset = page * PAGE_SIZE;
+
+  document.getElementById('logsBody').innerHTML =
+    `<tr><td colspan="7" class="px-5 py-10 text-center text-slate-600">Loading…</td></tr>`;
+
+  try {
+    const url = `/api/logs?limit=${PAGE_SIZE}&offset=${offset}${filter ? '&route_code=' + filter : ''}`;
+    const d = await fetch(url).then(r => r.json());
+    allLogsCache = d.items;
+
+    const tbody = document.getElementById('logsBody');
+    if (!d.items.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="px-5 py-10 text-center text-slate-600 text-sm">No logs found.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = d.items.map(log => `
+      <tr class="transition-colors text-[13px]">
+        <td class="px-5 py-3.5 text-slate-500 whitespace-nowrap">${fmtTime(log.scrape_timestamp)}</td>
+        <td class="px-5 py-3.5">
+          <span class="font-mono text-[11px] font-semibold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded">${log.route_code}</span>
+        </td>
+        <td class="px-5 py-3.5 whitespace-nowrap">
+          <div class="text-slate-200 font-medium">${log.flight_date}</div>
+          <div class="text-slate-600 text-[11px]">${log.day_of_week}</div>
+        </td>
+        <td class="px-5 py-3.5">${airlineBadge(log.airline)}</td>
+        <td class="px-5 py-3.5 whitespace-nowrap text-[12px]">
+          <div class="text-slate-200">${log.departure_time} → ${log.arrival_time}</div>
+          <div class="text-slate-500">${dur(log.duration_minutes)} · ${log.stops === 0 ? 'Non-stop' : `${log.stops} stop`}</div>
+        </td>
+        <td class="px-5 py-3.5 text-right">
+          <span class="text-base font-bold text-white">${inr(log.price)}</span>
+        </td>
+        <td class="px-5 py-3.5">
+          <button onclick="viewOptions(${log.id})"
+            class="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border border-border bg-surface-2 hover:border-border-bright text-slate-400 hover:text-slate-200 transition">
+            ${log.total_options_found} opts
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7" stroke-linecap="round"/></svg>
+          </button>
+        </td>
+      </tr>
+    `).join('');
+
+    /* Pagination */
+    const total = d.total;
+    const end = Math.min(offset + PAGE_SIZE, total);
+    document.getElementById('pageInfo').textContent = `${offset+1}–${end} of ${total}`;
+    document.getElementById('prevBtn').disabled = page <= 0;
+    document.getElementById('nextBtn').disabled = end >= total;
+  } catch (e) {
+    document.getElementById('logsBody').innerHTML =
+      `<tr><td colspan="7" class="px-5 py-10 text-center text-rose-400 text-sm">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function changePage(d) { loadLogs(currentPage + d); }
+
+/* ══════════════════════════════════════════════════════════════
+   MODAL — All options for a log
+══════════════════════════════════════════════════════════════ */
+function viewOptions(id) {
+  const log = allLogsCache.find(l => l.id === id);
+  if (!log) return;
+
+  document.getElementById('modalTitle').textContent = `${log.route_code} — All Flights`;
+  document.getElementById('modalSub').textContent = `${log.flight_date} · ${log.day_of_week} · Scraped at ${fmtTime(log.scrape_timestamp)}`;
+
+  const list = document.getElementById('modalList');
+  const flights = (log.all_flights || []).sort((a, b) => a.price - b.price);
+
+  if (!flights.length) {
+    list.innerHTML = `<div class="text-center text-slate-600 py-8 text-xs">No flight breakdown available.</div>`;
+  } else {
+    list.innerHTML = flights.map((f, i) => `
+      <div class="flight-option ${i === 0 ? 'cheapest' : ''}">
+        <div class="flex items-center gap-3 min-w-0">
+          ${airlineBadge(f.airline)}
+          <div class="text-[12px] min-w-0">
+            <div class="text-slate-200 font-medium">${f.departure_time} → ${f.arrival_time} <span class="text-slate-500 font-normal ml-1">${dur(f.duration_minutes)}</span></div>
+            <div class="text-slate-500">${f.stops === 0 ? 'Non-stop' : `${f.stops} stop(s)`}${f.plane_type ? ' · '+f.plane_type : ''}</div>
+          </div>
+        </div>
+        <div class="text-right flex-shrink-0">
+          <div class="font-bold text-sm ${i === 0 ? 'text-emerald-400' : 'text-white'}">${inr(f.price)}</div>
+          ${i === 0 ? '<div class="text-[10px] text-emerald-500 font-semibold">CHEAPEST</div>' : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('modal').style.display = 'flex';
+}
+
+function closeModal() { document.getElementById('modal').style.display = 'none'; }
+document.getElementById('modal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('modal')) closeModal();
+});
+
+/* ══════════════════════════════════════════════════════════════
+   SCRAPE TRIGGER
+══════════════════════════════════════════════════════════════ */
+async function triggerScrape() {
+  const btn = document.getElementById('triggerBtn');
+  btn.disabled = true;
+  document.getElementById('triggerIcon').classList.add('spin');
+  document.getElementById('triggerLabel').textContent = 'Starting…';
+  showToast('⚡', 'Scrape started — updating in background…', 'info');
+
+  try {
+    await fetch('/api/scrape/trigger', { method: 'POST' });
+    const poll = setInterval(async () => {
+      const s = await fetch('/api/status').then(r => r.json());
+      if (!s.is_scraping) {
+        clearInterval(poll);
+        await loadAll();
+        showToast('✅', 'Data refreshed successfully!', 'success');
+      }
+    }, 2500);
+  } catch (e) {
+    showToast('❌', 'Failed to trigger scrape.', 'error');
+    btn.disabled = false;
+    document.getElementById('triggerIcon').classList.remove('spin');
+    document.getElementById('triggerLabel').textContent = 'Refresh';
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TOAST
+══════════════════════════════════════════════════════════════ */
+let _toastTimeout;
+function showToast(icon, msg, type = 'info') {
+  const el = document.getElementById('toast');
+  const inner = document.getElementById('toastInner');
+  document.getElementById('toastIcon').textContent = icon;
+  document.getElementById('toastMsg').textContent = msg;
+
+  const colors = { success: 'border-emerald-500/30 bg-emerald-900/30', error: 'border-rose-500/30 bg-rose-900/30', info: 'border-blue-500/30 bg-blue-900/20' };
+  inner.className = `flex items-center gap-3 px-4 py-3 rounded-xl border shadow-2xl text-sm font-medium backdrop-blur-md text-white ${colors[type] || colors.info}`;
+
+  el.classList.remove('hidden');
+  el.classList.add('toast-show');
+  clearTimeout(_toastTimeout);
+  _toastTimeout = setTimeout(() => {
+    el.classList.add('toast-hide');
+    setTimeout(() => { el.classList.add('hidden'); el.classList.remove('toast-show','toast-hide'); }, 300);
+  }, 3500);
 }

@@ -1,242 +1,289 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AeroTrack — Flight Price Intelligence</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            50: '#f0f7ff',
-                            100: '#e0effe',
-                            500: '#0284c7',
-                            600: '#0369a1',
-                            700: '#075985',
-                            900: '#0c4a6e',
-                        },
-                        darkBg: '#0b0f19',
-                        darkCard: '#111827',
-                        darkBorder: '#1f293d',
-                    }
-                }
-            }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AeroTrack — Flight Price Intelligence</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+          colors: {
+            surface: {
+              DEFAULT: '#0a0d14',
+              1: '#0d1117',
+              2: '#161b27',
+              3: '#1c2333',
+              4: '#21283a',
+            },
+            border: { DEFAULT: '#21283a', bright: '#2d3a52', glow: '#1e40af44' },
+            brand: { DEFAULT: '#3b82f6', dim: '#1d4ed8', glow: 'rgba(59,130,246,0.15)' },
+            accent: { cyan: '#06b6d4', violet: '#8b5cf6', emerald: '#10b981', rose: '#f43f5e', amber: '#f59e0b' },
+          },
+          backgroundImage: {
+            'grid-pattern': "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M0 0h40v40H0z' fill='none'/%3E%3Cpath d='M0 0h1v40H0zM40 0h1v40H0zM0 0h40v1H0zM0 40h40v1H0z' fill='%2321283a' opacity='.4'/%3E%3C/svg%3E\")",
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s ease-in-out infinite',
+            'float': 'float 6s ease-in-out infinite',
+            'shimmer': 'shimmer 2s linear infinite',
+          },
+          keyframes: {
+            float: { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-6px)' } },
+            shimmer: { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } },
+          }
         }
-    </script>
-    <!-- Chart.js & Date Adapter -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="/static/css/styles.css">
+      }
+    }
+  </script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+  <link rel="stylesheet" href="/static/css/styles.css" />
 </head>
-<body class="bg-darkBg text-slate-100 min-h-screen font-sans antialiased selection:bg-sky-500 selection:text-white">
 
-    <!-- Top Navigation -->
-    <header class="border-b border-darkBorder bg-darkCard/80 backdrop-blur-md sticky top-0 z-40">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
-                    <i data-lucide="plane" class="w-5 h-5 text-white"></i>
-                </div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <span class="font-bold text-lg tracking-tight text-white">AeroTrack</span>
-                        <span class="text-xs px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 font-medium border border-sky-500/20">Google Flights</span>
-                    </div>
-                    <p class="text-xs text-slate-400 hidden sm:block">Hourly Cheapest Fare Monitor & Price Predictor</p>
-                </div>
-            </div>
+<body class="bg-surface text-slate-200 min-h-screen antialiased" style="font-family: 'Inter', sans-serif;">
 
-            <!-- Status & Actions -->
-            <div class="flex items-center gap-3 sm:gap-4">
-                <!-- BrightData Status Pill -->
-                <div id="brightDataPill" class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors bg-slate-800/80 border-slate-700 text-slate-300">
-                    <span id="bdDot" class="h-2 w-2 rounded-full bg-amber-400 animate-pulse"></span>
-                    <span id="bdText">Checking IP Protection...</span>
-                </div>
+  <!-- Ambient background glow blobs -->
+  <div class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+    <div class="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full opacity-[0.04]" style="background: radial-gradient(circle, #3b82f6, transparent 70%);"></div>
+    <div class="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full opacity-[0.05]" style="background: radial-gradient(circle, #8b5cf6, transparent 70%);"></div>
+    <div class="absolute top-[40%] left-[60%] w-[300px] h-[300px] rounded-full opacity-[0.03]" style="background: radial-gradient(circle, #06b6d4, transparent 70%);"></div>
+    <!-- Grid pattern overlay -->
+    <div class="absolute inset-0 bg-grid-pattern opacity-40"></div>
+  </div>
 
-                <!-- Manual Trigger Button -->
-                <button id="triggerBtn" onclick="triggerScrape()" class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white text-xs sm:text-sm font-medium transition shadow-md shadow-sky-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <i id="triggerIcon" data-lucide="refresh-cw" class="w-4 h-4"></i>
-                    <span id="triggerLabel">Check Now</span>
-                </button>
+  <!-- ═══════════════════════════════ HEADER ═══════════════════════════════ -->
+  <header class="sticky top-0 z-50 border-b border-border backdrop-blur-xl" style="background: rgba(10,13,20,0.85);">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[60px] flex items-center justify-between gap-4">
 
-                <!-- CSV Export -->
-                <a href="/api/export" download class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-darkBorder hover:border-slate-600 bg-slate-800/60 hover:bg-slate-800 text-slate-300 text-xs sm:text-sm font-medium transition">
-                    <i data-lucide="download" class="w-4 h-4"></i>
-                    <span class="hidden md:inline">Export CSV</span>
-                </a>
-            </div>
+      <!-- Logo -->
+      <a href="/" class="flex items-center gap-3 flex-shrink-0">
+        <div class="relative w-8 h-8 flex-shrink-0">
+          <div class="absolute inset-0 rounded-lg bg-gradient-to-tr from-blue-600 to-cyan-400 opacity-80 blur-[6px]"></div>
+          <div class="relative w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-cyan-400 flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path d="M22 16.5H2M5 12l3-4.5L12 10l4-6 4 6.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
         </div>
-    </header>
+        <div class="hidden sm:block">
+          <span class="text-[15px] font-bold tracking-tight text-white">AeroTrack</span>
+          <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 align-middle">BETA</span>
+        </div>
+      </a>
 
-    <!-- Main Container -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <!-- Center nav pills -->
+      <div class="hidden md:flex items-center gap-1 bg-surface-2 border border-border rounded-xl px-1 py-1 text-xs">
+        <button onclick="showTab('dashboard')" id="tab-dashboard" class="tab-pill active px-4 py-1.5 rounded-lg font-medium transition-all">Dashboard</button>
+        <button onclick="showTab('logs')" id="tab-logs" class="tab-pill px-4 py-1.5 rounded-lg font-medium transition-all">Log History</button>
+        <button onclick="showTab('stats')" id="tab-stats" class="tab-pill px-4 py-1.5 rounded-lg font-medium transition-all">Analytics</button>
+      </div>
 
-        <!-- Top Banner / System Status Alert -->
-        <div id="statusBanner" class="hidden rounded-xl border p-4 text-xs sm:text-sm flex items-center justify-between transition-all">
-            <div class="flex items-center gap-3">
-                <i id="statusBannerIcon" data-lucide="shield-check" class="w-5 h-5 flex-shrink-0"></i>
-                <span id="statusBannerText"></span>
-            </div>
-            <button onclick="dismissBanner()" class="text-slate-400 hover:text-slate-200">
-                <i data-lucide="x" class="w-4 h-4"></i>
-            </button>
+      <!-- Right controls -->
+      <div class="flex items-center gap-2 sm:gap-3">
+
+        <!-- BrightData badge -->
+        <div id="bdBadge" class="hidden sm:flex items-center gap-1.5 text-[11px] font-medium px-3 py-1 rounded-full border border-border bg-surface-2 text-slate-400">
+          <span id="bdDot" class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse-slow"></span>
+          <span id="bdLabel">Checking...</span>
         </div>
 
-        <!-- Section 1: Route Quick Cards -->
-        <section>
-            <div class="flex items-center justify-between mb-4">
-                <div>
-                    <h2 class="text-lg font-semibold text-white tracking-tight flex items-center gap-2">
-                        <i data-lucide="compass" class="w-5 h-5 text-sky-400"></i>
-                        Active Tracked Routes
-                    </h2>
-                    <p class="text-xs text-slate-400">Monitoring Hyderabad (HYD), Pune (PNQ), and Mumbai (BOM) routes every hour</p>
-                </div>
-                <div class="text-right">
-                    <span class="text-xs text-slate-400">Next auto-check:</span>
-                    <span id="nextCheckTimer" class="text-xs font-semibold text-sky-400 ml-1">--:--</span>
-                </div>
-            </div>
-
-            <!-- Route Grid -->
-            <div id="routesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <!-- Dynamically injected route cards -->
-                <div class="col-span-full py-8 text-center text-slate-500 animate-pulse">Loading tracked routes...</div>
-            </div>
-        </section>
-
-        <!-- Section 2: Interactive Price Graph -->
-        <section class="rounded-2xl border border-darkBorder bg-darkCard p-6 shadow-xl space-y-4">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-darkBorder/60 pb-4">
-                <div>
-                    <h2 class="text-lg font-semibold text-white tracking-tight flex items-center gap-2">
-                        <i data-lucide="trending-down" class="w-5 h-5 text-emerald-400"></i>
-                        Price Trends & Lowest Fares Over Time
-                    </h2>
-                    <p class="text-xs text-slate-400">Hourly trajectory of the cheapest available ticket for each route</p>
-                </div>
-
-                <!-- Controls: Route Selector & Time Horizon -->
-                <div class="flex flex-wrap items-center gap-2">
-                    <select id="graphRouteFilter" onchange="renderPriceChart()" class="bg-slate-800/80 border border-darkBorder text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-sky-500">
-                        <option value="all">All Routes (Comparison)</option>
-                        <option value="HYD-PNQ">HYD → PNQ (Hyderabad to Pune)</option>
-                        <option value="PNQ-HYD">PNQ → HYD (Pune to Hyderabad)</option>
-                        <option value="BOM-HYD">BOM → HYD (Mumbai to Hyderabad)</option>
-                        <option value="HYD-BOM">HYD → BOM (Hyderabad to Mumbai)</option>
-                    </select>
-
-                    <div class="flex bg-slate-800/80 p-0.5 rounded-lg border border-darkBorder text-xs">
-                        <button onclick="setTimeRange(1)" id="btnRange1" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white transition">24h</button>
-                        <button onclick="setTimeRange(3)" id="btnRange3" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white transition">3d</button>
-                        <button onclick="setTimeRange(7)" id="btnRange7" class="px-2.5 py-1 rounded-md bg-sky-600 text-white font-medium shadow-sm transition">7d</button>
-                        <button onclick="setTimeRange(30)" id="btnRange30" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white transition">30d</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Chart Container -->
-            <div class="relative h-80 sm:h-96 w-full">
-                <canvas id="priceHistoryChart"></canvas>
-            </div>
-        </section>
-
-        <!-- Section 3: Summary Analytics & Statistics -->
-        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="statsGrid">
-            <!-- Stats cards dynamically injected -->
-        </section>
-
-        <!-- Section 4: Detailed Flight Logs Table -->
-        <section class="rounded-2xl border border-darkBorder bg-darkCard overflow-hidden shadow-xl">
-            <div class="p-6 border-b border-darkBorder/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h2 class="text-lg font-semibold text-white tracking-tight flex items-center gap-2">
-                        <i data-lucide="history" class="w-5 h-5 text-indigo-400"></i>
-                        Cheapest Flight Logs
-                    </h2>
-                    <p class="text-xs text-slate-400">Historical records of lowest fares logged during each hourly check</p>
-                </div>
-
-                <div class="flex items-center gap-2">
-                    <label for="tableRouteFilter" class="text-xs text-slate-400">Route:</label>
-                    <select id="tableRouteFilter" onchange="loadLogs(0)" class="bg-slate-800/80 border border-darkBorder text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-sky-500">
-                        <option value="">All Predefined Routes</option>
-                        <option value="HYD-PNQ">HYD → PNQ</option>
-                        <option value="PNQ-HYD">PNQ → HYD</option>
-                        <option value="BOM-HYD">BOM → HYD</option>
-                        <option value="HYD-BOM">HYD → BOM</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                    <thead class="bg-slate-900/60 text-slate-400 text-xs uppercase tracking-wider border-b border-darkBorder/60">
-                        <tr>
-                            <th class="px-6 py-3.5">Scraped At</th>
-                            <th class="px-6 py-3.5">Route</th>
-                            <th class="px-6 py-3.5">Flight Date & Day</th>
-                            <th class="px-6 py-3.5">Airline & Flight</th>
-                            <th class="px-6 py-3.5">Timing & Duration</th>
-                            <th class="px-6 py-3.5">Cheapest Price</th>
-                            <th class="px-6 py-3.5">Options</th>
-                        </tr>
-                    </thead>
-                    <tbody id="logsTableBody" class="divide-y divide-darkBorder/40 font-normal">
-                        <tr>
-                            <td colspan="7" class="px-6 py-8 text-center text-slate-500">Loading flight logs...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Pagination Bar -->
-            <div class="px-6 py-4 border-t border-darkBorder/60 flex items-center justify-between text-xs text-slate-400">
-                <span id="paginationInfo">Showing 0 of 0 logs</span>
-                <div class="flex gap-2">
-                    <button id="prevPageBtn" onclick="changePage(-1)" disabled class="px-3 py-1 rounded bg-slate-800 border border-darkBorder text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 transition">Previous</button>
-                    <button id="nextPageBtn" onclick="changePage(1)" disabled class="px-3 py-1 rounded bg-slate-800 border border-darkBorder text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 transition">Next</button>
-                </div>
-            </div>
-        </section>
-
-    </main>
-
-    <!-- Flight Details Modal -->
-    <div id="detailsModal" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-darkCard border border-darkBorder rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
-            <div class="flex items-center justify-between border-b border-darkBorder pb-3">
-                <div class="flex items-center gap-2">
-                    <i data-lucide="plane-takeoff" class="w-5 h-5 text-sky-400"></i>
-                    <h3 id="modalTitle" class="font-semibold text-lg text-white">All Flights for Route</h3>
-                </div>
-                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-200">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
-            </div>
-            
-            <div id="modalFlightList" class="overflow-y-auto space-y-3 flex-1 pr-1">
-                <!-- Flight options dynamically rendered here -->
-            </div>
-            
-            <div class="pt-3 border-t border-darkBorder flex justify-end">
-                <button onclick="closeModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium">Close</button>
-            </div>
+        <!-- Next check -->
+        <div class="hidden sm:block text-[11px] text-slate-500">
+          Next: <span id="nextCheck" class="text-slate-300 font-medium font-mono">--</span>
         </div>
+
+        <!-- Manual scrape -->
+        <button id="triggerBtn" onclick="triggerScrape()" class="btn-primary flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg font-semibold">
+          <svg id="triggerIcon" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span id="triggerLabel">Refresh</span>
+        </button>
+
+        <!-- Export -->
+        <a href="/api/export" download title="Export CSV"
+           class="w-8 h-8 flex items-center justify-center rounded-lg border border-border bg-surface-2 hover:border-border-bright hover:bg-surface-3 text-slate-400 hover:text-slate-200 transition">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+
+      </div>
     </div>
+  </header>
 
-    <!-- Frontend Script -->
-    <script src="/static/js/app.js"></script>
-    <script>
-        lucide.createIcons();
-    </script>
+  <!-- ═══════════════════════════════ MAIN ═══════════════════════════════ -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- ── DASHBOARD TAB ── -->
+    <div id="tab-content-dashboard">
+
+      <!-- Hero Stats strip -->
+      <div id="heroStrip" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        <!-- populated dynamically -->
+      </div>
+
+      <!-- Section header -->
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h2 class="text-base font-semibold text-white flex items-center gap-2">
+            <span class="w-1 h-4 rounded-full bg-gradient-to-b from-blue-500 to-cyan-400 inline-block"></span>
+            Tracked Routes
+          </h2>
+          <p class="text-[12px] text-slate-500 mt-0.5">Hyderabad · Pune · Mumbai — checked hourly via Google Flights</p>
+        </div>
+        <div class="text-[11px] text-slate-500 hidden sm:block">
+          Tracking <span class="text-white font-medium">4 routes</span> · <span class="text-white font-medium">{{ currency }}</span>
+        </div>
+      </div>
+
+      <!-- Route Cards -->
+      <div id="routesGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="col-span-full flex justify-center py-16 text-slate-600 text-sm">
+          <div class="flex items-center gap-3">
+            <svg class="w-5 h-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+            Loading routes...
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart section -->
+      <div class="glass-card rounded-2xl p-6 space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div>
+            <h2 class="text-base font-semibold text-white flex items-center gap-2">
+              <span class="w-1 h-4 rounded-full bg-gradient-to-b from-violet-500 to-blue-500 inline-block"></span>
+              Price History
+            </h2>
+            <p class="text-[12px] text-slate-500 mt-0.5">Cheapest fare captured each scrape cycle</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="graphRouteFilter" onchange="renderChart()"
+              class="select-field text-xs px-3 py-1.5 rounded-lg">
+              <option value="all">All Routes</option>
+              <option value="HYD-PNQ">HYD → PNQ</option>
+              <option value="PNQ-HYD">PNQ → HYD</option>
+              <option value="BOM-HYD">BOM → HYD</option>
+              <option value="HYD-BOM">HYD → BOM</option>
+            </select>
+            <div class="flex bg-surface-2 border border-border rounded-lg p-0.5 text-[11px]">
+              <button onclick="setRange(1)"  id="r1"  class="range-btn px-2.5 py-1 rounded-md text-slate-400">24h</button>
+              <button onclick="setRange(3)"  id="r3"  class="range-btn px-2.5 py-1 rounded-md text-slate-400">3d</button>
+              <button onclick="setRange(7)"  id="r7"  class="range-btn active px-2.5 py-1 rounded-md">7d</button>
+              <button onclick="setRange(30)" id="r30" class="range-btn px-2.5 py-1 rounded-md text-slate-400">30d</button>
+            </div>
+          </div>
+        </div>
+        <div class="relative h-72 sm:h-96">
+          <canvas id="priceChart"></canvas>
+        </div>
+      </div>
+
+    </div><!-- /dashboard tab -->
+
+    <!-- ── LOGS TAB ── -->
+    <div id="tab-content-logs" class="hidden">
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h2 class="text-base font-semibold text-white flex items-center gap-2">
+            <span class="w-1 h-4 rounded-full bg-gradient-to-b from-emerald-500 to-cyan-400 inline-block"></span>
+            Price Log History
+          </h2>
+          <p class="text-[12px] text-slate-500 mt-0.5">Every cheapest fare captured per scrape cycle</p>
+        </div>
+        <select id="tableRouteFilter" onchange="loadLogs(0)"
+          class="select-field text-xs px-3 py-1.5 rounded-lg">
+          <option value="">All Routes</option>
+          <option value="HYD-PNQ">HYD → PNQ</option>
+          <option value="PNQ-HYD">PNQ → HYD</option>
+          <option value="BOM-HYD">BOM → HYD</option>
+          <option value="HYD-BOM">HYD → BOM</option>
+        </select>
+      </div>
+
+      <div class="glass-card rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="border-b border-border">
+              <tr class="text-[11px] uppercase tracking-widest text-slate-500">
+                <th class="px-5 py-3.5 text-left">Checked At</th>
+                <th class="px-5 py-3.5 text-left">Route</th>
+                <th class="px-5 py-3.5 text-left">Date</th>
+                <th class="px-5 py-3.5 text-left">Airline</th>
+                <th class="px-5 py-3.5 text-left">Timing</th>
+                <th class="px-5 py-3.5 text-right">Price</th>
+                <th class="px-5 py-3.5 text-left">Options</th>
+              </tr>
+            </thead>
+            <tbody id="logsBody" class="divide-y divide-border/50">
+              <tr><td colspan="7" class="px-5 py-10 text-center text-slate-600 text-sm">Loading logs...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="px-5 py-3 border-t border-border flex items-center justify-between text-[11px] text-slate-500 bg-surface-2/50">
+          <span id="pageInfo">—</span>
+          <div class="flex gap-2">
+            <button id="prevBtn" onclick="changePage(-1)" disabled class="btn-ghost px-3 py-1 rounded-lg text-xs disabled:opacity-30">← Prev</button>
+            <button id="nextBtn" onclick="changePage(1)"  disabled class="btn-ghost px-3 py-1 rounded-lg text-xs disabled:opacity-30">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div><!-- /logs tab -->
+
+    <!-- ── ANALYTICS TAB ── -->
+    <div id="tab-content-stats" class="hidden">
+      <div class="mb-5">
+        <h2 class="text-base font-semibold text-white flex items-center gap-2">
+          <span class="w-1 h-4 rounded-full bg-gradient-to-b from-amber-500 to-rose-500 inline-block"></span>
+          Route Analytics
+        </h2>
+        <p class="text-[12px] text-slate-500 mt-0.5">Aggregated price statistics and carrier breakdown</p>
+      </div>
+      <div id="statsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+    </div><!-- /stats tab -->
+
+  </main>
+
+  <!-- ═══════════════════════════════ MODAL ═══════════════════════════════ -->
+  <div id="modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div class="glass-card rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[80vh] flex flex-col">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 id="modalTitle" class="font-semibold text-white text-base"></h3>
+          <p id="modalSub" class="text-[12px] text-slate-500"></p>
+        </div>
+        <button onclick="closeModal()" class="w-7 h-7 rounded-lg bg-surface-3 hover:bg-surface-4 flex items-center justify-center text-slate-400 hover:text-white transition">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div id="modalList" class="space-y-2 overflow-y-auto flex-1 pr-1"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 hidden">
+    <div id="toastInner" class="flex items-center gap-3 px-4 py-3 rounded-xl border border-border shadow-2xl text-sm font-medium bg-surface-2 text-white backdrop-blur-md">
+      <span id="toastIcon"></span>
+      <span id="toastMsg"></span>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
 </body>
 </html>
