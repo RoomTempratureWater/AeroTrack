@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date
 from app.database import Base
 
 
@@ -45,3 +45,29 @@ class ScrapeJobRun(Base):
     routes_checked = Column(Integer, default=0)
     records_logged = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)
+
+
+class TrackedDate(Base):
+    """A user-configured flight date to track prices for (max 5 active at a time)."""
+    __tablename__ = "tracked_dates"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+
+    # The flight departure date being tracked, e.g. "2026-10-06"
+    flight_date = Column(String(10), unique=True, index=True, nullable=False)
+
+    # Human label, e.g. "Diwali trip"
+    label = Column(String(128), nullable=True)
+
+    # Whether this tracker is currently active (scraping)
+    is_active = Column(Boolean, default=True, index=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    deactivated_at = Column(DateTime, nullable=True)
+
+    # Scrape counters (reset daily at midnight UTC)
+    scrapes_today = Column(Integer, default=0)
+    last_scrape_date = Column(String(10), nullable=True)  # "YYYY-MM-DD" of last reset
+    last_scrape_at = Column(DateTime, nullable=True)
+
