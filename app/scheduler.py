@@ -1,16 +1,16 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, Any
+from datetime import datetime, timezone, date
+from typing import Optional, Dict, Any, List
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 
 from app.config import settings
 from app.database import async_session
-from app.models import FlightLog, ScrapeJobRun
+from app.models import FlightLog, ScrapeJobRun, TrackedDate
 from app.scraper import scraper_instance
 
 logger = logging.getLogger("flight_tracker.scheduler")
@@ -25,18 +25,38 @@ class ScraperScheduler:
         self.last_run_summary: Optional[Dict[str, Any]] = None
 
     def start(self):
-        """Starts the scheduler with interval trigger."""
-        if not self.scheduler.running:
+        """Starts the scheduler with 3 fixed daily cron jobs derived from SCRAPE_TIMES_IST."""
+        if self.scheduler.running:
+            return
+
+        scrape_times = settings.scrape_times_utc
+        if not scrape_times:
+            # Fallback: every CHECK_INTERVAL_MINUTES
+            logger.warning("No valid SCRAPE_TIMES_IST parsed. Falling back to interval trigger.")
+            from apscheduler.triggers.interval import IntervalTrigger
             self.scheduler.add_job(
-                self.run_hourly_scrape,
+                self.run_scrape_cycle,
                 trigger=IntervalTrigger(minutes=settings.CHECK_INTERVAL_MINUTES),
-                id="flight_scrape_hourly",
-                name="Hourly Flight Price Scraper",
+                id="flight_scrape_fallback",
+                name="Flight Price Scraper (fallback interval)",
                 replace_existing=True,
                 max_instances=1,
             )
-            self.scheduler.start()
-            logger.info(f"Scheduler started. Job scheduled every {settings.CHECK_INTERVAL_MINUTES} minutes.")
+        else:
+            for i, (hour, minute) in enumerate(scrape_times):
+                job_id = f"flight_scrape_{i}"
+                self.scheduler.add_job(
+                    self.run_scrape_cycle,
+                    trigger=CronTrigger(hour=hour, minute=minute, timezone="UTC"),
+                    id=job_id,
+                    name=f"Daily Flight Scrape #{i+1} ({hour:02d}:{minute:02d} UTC)",
+                    replace_existing=True,
+                    max_instances=1,
+                )
+                logger.info(f"Scheduled scrape job #{i+1} at {hour:02d}:{minute:02d} UTC")
+
+        self.scheduler.start()
+        logger.info(f"Scheduler started with {len(scrape_times)} daily scrape time(s).")
 
     def stop(self):
         """Stops the scheduler."""
@@ -46,15 +66,67 @@ class ScraperScheduler:
 
     @property
     def next_run_time(self) -> Optional[datetime]:
-        job = self.scheduler.get_job("flight_scrape_hourly")
-        if job and job.next_run_time:
-            return job.next_run_time
-        return None
+        """Returns the nearest upcoming run across all scheduled jobs."""
+        earliest = None
+        for job in self.scheduler.get_jobs():
+            if job.next_run_time:
+                if earliest is None or job.next_run_time < earliest:
+                    earliest = job.next_run_time
+        return earliest
 
-    async def run_hourly_scrape(self) -> Dict[str, Any]:
+    @property
+    def scheduled_times_ist(self) -> List[str]:
+        """Human-readable list of scrape times in IST for the UI."""
+        times = []
+        for h, m in settings.scrape_times_utc:
+            # UTC → IST: add 5h30m
+            total = h * 60 + m + 330
+            total %= 1440
+            times.append(f"{total // 60:02d}:{total % 60:02d} IST")
+        return times
+
+    async def _get_active_tracked_dates(self) -> List[TrackedDate]:
         """
-        Executes a scrape cycle for all configured routes and dates.
-        Logs the cheapest flight of that day to the database.
+        Fetches all active TrackedDate records from the DB.
+        Auto-deactivates any dates that are in the past.
+        Also resets the per-day scrape counter when the UTC date has rolled over.
+        """
+        today_str = date.today().isoformat()
+        results = []
+
+        async with async_session() as session:
+            res = await session.execute(
+                select(TrackedDate).where(TrackedDate.is_active == True)
+            )
+            trackers = res.scalars().all()
+
+            for tracker in trackers:
+                # Deactivate past dates
+                if tracker.flight_date < today_str:
+                    tracker.is_active = False
+                    tracker.deactivated_at = datetime.now(timezone.utc)
+                    logger.info(
+                        f"Auto-deactivated past tracker: {tracker.flight_date} "
+                        f"(id={tracker.id})"
+                    )
+                    await session.commit()
+                    continue
+
+                # Reset per-day counter if it's a new calendar day (UTC)
+                if tracker.last_scrape_date != today_str:
+                    tracker.scrapes_today = 0
+                    tracker.last_scrape_date = today_str
+                    await session.commit()
+
+                results.append(tracker)
+
+        return results
+
+    async def run_scrape_cycle(self) -> Dict[str, Any]:
+        """
+        Executes one scrape cycle for all active tracked dates × all routes.
+        Skips a tracked date if it has already been scraped MAX_SCRAPES_PER_DAY times today.
+        Logs the cheapest flight found per route-date pair to the database.
         """
         if self.is_scraping:
             logger.warning("Scrape cycle already in progress, skipping concurrent run.")
@@ -74,39 +146,66 @@ class ScraperScheduler:
             routes_checked=0,
             records_logged=0
         )
-
         async with async_session() as session:
             session.add(job_run)
             await session.commit()
             await session.refresh(job_run)
             job_run_id = job_run.id
 
-        target_dates = scraper_instance.get_target_dates()
+        # Fetch active tracked dates (with auto-deactivation of past dates)
+        active_trackers = await self._get_active_tracked_dates()
+
+        if not active_trackers:
+            logger.info("No active date trackers configured. Skipping scrape cycle.")
+            status = "success"
+            self.is_scraping = False
+            summary = {
+                "status": status,
+                "started_at": start_time.isoformat(),
+                "finished_at": start_time.isoformat(),
+                "duration_seconds": 0,
+                "routes_checked": 0,
+                "records_logged": 0,
+                "error": None,
+                "skipped_trackers": "no active trackers"
+            }
+            self.last_run_summary = summary
+            return summary
 
         try:
-            for route in settings.ROUTES:
-                origin = route["origin"]
-                dest = route["destination"]
-                route_code = route["code"]
+            for tracker in active_trackers:
+                flight_date = tracker.flight_date
+                today_str = date.today().isoformat()
 
-                for flight_date in target_dates:
+                # Enforce per-day scrape cap
+                if tracker.last_scrape_date == today_str and tracker.scrapes_today >= settings.MAX_SCRAPES_PER_DAY:
+                    logger.info(
+                        f"Tracker {flight_date} already scraped "
+                        f"{tracker.scrapes_today}/{settings.MAX_SCRAPES_PER_DAY} times today. Skipping."
+                    )
+                    continue
+
+                logger.info(
+                    f"Scraping tracker {flight_date} "
+                    f"(scrape {tracker.scrapes_today + 1}/{settings.MAX_SCRAPES_PER_DAY} today)"
+                )
+
+                for route in settings.ROUTES:
+                    origin = route["origin"]
+                    dest = route["destination"]
+                    route_code = route["code"]
                     routes_checked += 1
-                    logger.info(f"Checking {route_code} ({route['origin_name']} -> {route['destination_name']}) for date {flight_date}")
+
+                    logger.info(
+                        f"  Checking {route_code} "
+                        f"({route['origin_name']} → {route['destination_name']}) "
+                        f"for {flight_date}"
+                    )
 
                     cheapest, all_flights = await scraper_instance.fetch_route(origin, dest, flight_date)
 
-                    # If no flights found for today (e.g., late evening), try checking tomorrow
-                    if not cheapest and flight_date == datetime.now().strftime("%Y-%m-%d"):
-                        tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-                        if tomorrow_str not in target_dates:
-                            logger.info(f"No flights left today for {route_code}. Trying tomorrow: {tomorrow_str}")
-                            cheapest, all_flights = await scraper_instance.fetch_route(origin, dest, tomorrow_str)
-                            if cheapest:
-                                flight_date = tomorrow_str
-
                     if cheapest:
                         day_name = datetime.strptime(flight_date, "%Y-%m-%d").strftime("%A")
-                        
                         log_entry = FlightLog(
                             scrape_timestamp=datetime.now(timezone.utc),
                             route_code=route_code,
@@ -129,21 +228,33 @@ class ScraperScheduler:
                             is_brightdata_used=scraper_instance.is_brightdata_active,
                             all_flights_json=json.dumps(all_flights)
                         )
-
                         async with async_session() as session:
                             session.add(log_entry)
                             await session.commit()
-
                         records_logged += 1
                         logger.info(
-                            f"Logged cheapest for {route_code} on {flight_date}: ₹{cheapest['price']} "
-                            f"({cheapest['airline']}) dep {cheapest['departure_time']} arr {cheapest['arrival_time']}"
+                            f"  Logged: ₹{cheapest['price']} via {cheapest['airline']} "
+                            f"dep {cheapest['departure_time']} arr {cheapest['arrival_time']}"
                         )
                     else:
-                        logger.warning(f"No valid flight prices retrieved for {route_code} on {flight_date}")
+                        logger.warning(
+                            f"  No valid prices for {route_code} on {flight_date}"
+                        )
 
-                    # Polite 1.5 second pause between route queries
+                    # Polite pause between route queries
                     await asyncio.sleep(1.5)
+
+                # Update scrape counter on the tracker
+                async with async_session() as session:
+                    res = await session.execute(
+                        select(TrackedDate).where(TrackedDate.id == tracker.id)
+                    )
+                    t = res.scalar_one_or_none()
+                    if t:
+                        t.scrapes_today = (t.scrapes_today or 0) + 1
+                        t.last_scrape_at = datetime.now(timezone.utc)
+                        t.last_scrape_date = today_str
+                        await session.commit()
 
             status = "success"
         except Exception as e:
@@ -184,8 +295,15 @@ class ScraperScheduler:
             except Exception as e:
                 logger.error(f"Failed to update ScrapeJobRun in DB: {e}")
 
-        logger.info(f"Scrape cycle finished with status={status}. Logged {records_logged} records.")
+        logger.info(
+            f"Scrape cycle finished: status={status}, "
+            f"{records_logged} records logged across {routes_checked} route checks."
+        )
         return summary
+
+    # Keep old method name as alias so existing callers (startup trigger) still work
+    async def run_hourly_scrape(self) -> Dict[str, Any]:
+        return await self.run_scrape_cycle()
 
 
 scheduler_instance = ScraperScheduler()

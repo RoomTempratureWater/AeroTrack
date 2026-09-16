@@ -10,6 +10,9 @@ const PAGE_SIZE = 20;
 let allLogsCache = [];
 let rawHistory = null;
 
+// Active flight date filter (set from server-injected window.FLIGHT_DATE)
+const FLIGHT_DATE = (window.FLIGHT_DATE && window.FLIGHT_DATE.trim()) ? window.FLIGHT_DATE.trim() : null;
+
 const ROUTE_COLORS = {
   'HYD-PNQ': { line: '#38bdf8', fill: 'rgba(56,189,248,0.08)', label: 'HYD→PNQ' },
   'PNQ-HYD': { line: '#a78bfa', fill: 'rgba(167,139,250,0.08)', label: 'PNQ→HYD' },
@@ -22,9 +25,23 @@ const ROUTE_COLORS = {
 ══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
   initChart();
+  initDateBanner();
   loadAll();
   setInterval(loadStatus, 15000);
 });
+
+function initDateBanner() {
+  if (!FLIGHT_DATE) return;
+  const banner = document.getElementById('dateContextBanner');
+  if (!banner) return;
+  banner.classList.remove('hidden');
+  document.getElementById('bannerDate').textContent = FLIGHT_DATE;
+  const dow = new Date(FLIGHT_DATE + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  document.getElementById('bannerDow').textContent = '· ' + dow;
+  // Update page title
+  document.title = `AeroTrack — ${FLIGHT_DATE}`;
+}
+
 
 async function loadAll() {
   await Promise.all([
@@ -154,8 +171,8 @@ async function buildHeroStrip(routes) {
       accent: '#34d399',
     },
     {
-      label: 'Scrape Interval',
-      value: `${statusData.check_interval_minutes || 60} min`,
+      label: 'Scrape Schedule',
+      value: `${(statusData.scrape_times_ist || []).length || 3}×/day`,
       sub: statusData.is_scraping ? 'scanning now...' : 'auto-scheduled',
       accent: '#fbbf24',
     },
@@ -175,7 +192,8 @@ async function buildHeroStrip(routes) {
 ══════════════════════════════════════════════════════════════ */
 async function loadRoutes() {
   try {
-    const routes = await fetch('/api/routes').then(r => r.json());
+    const url = FLIGHT_DATE ? `/api/routes?flight_date=${FLIGHT_DATE}` : '/api/routes';
+    const routes = await fetch(url).then(r => r.json());
     await buildHeroStrip(routes);
     renderRouteCards(routes);
   } catch (e) {
@@ -313,7 +331,8 @@ function initChart() {
 
 async function loadHistory() {
   try {
-    rawHistory = await fetch(`/api/history?days=${currentDays}`).then(r => r.json());
+    const dateParam = FLIGHT_DATE ? `&flight_date=${FLIGHT_DATE}` : '';
+    rawHistory = await fetch(`/api/history?days=${currentDays}${dateParam}`).then(r => r.json());
     renderChart();
   } catch {}
 }
@@ -365,7 +384,8 @@ function setRange(d) {
 ══════════════════════════════════════════════════════════════ */
 async function loadStats() {
   try {
-    const stats = await fetch('/api/stats').then(r => r.json());
+    const url = FLIGHT_DATE ? `/api/stats?flight_date=${FLIGHT_DATE}` : '/api/stats';
+    const stats = await fetch(url).then(r => r.json());
     const colors = ['#38bdf8','#a78bfa','#fbbf24','#34d399'];
     document.getElementById('statsGrid').innerHTML = stats.map((s, i) => `
       <div class="glass-card rounded-2xl p-5 space-y-4">
@@ -421,7 +441,9 @@ async function loadLogs(page = 0) {
     `<tr><td colspan="7" class="px-5 py-10 text-center text-slate-600">Loading…</td></tr>`;
 
   try {
-    const url = `/api/logs?limit=${PAGE_SIZE}&offset=${offset}${filter ? '&route_code=' + filter : ''}`;
+    let url = `/api/logs?limit=${PAGE_SIZE}&offset=${offset}`;
+    if (filter) url += `&route_code=${filter}`;
+    if (FLIGHT_DATE) url += `&flight_date=${FLIGHT_DATE}`;
     const d = await fetch(url).then(r => r.json());
     allLogsCache = d.items;
 

@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AeroTrack — Date Trackers</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+          colors: {
+            surface: {
+              DEFAULT: '#0a0d14',
+              1: '#0d1117',
+              2: '#161b27',
+              3: '#1c2333',
+              4: '#21283a',
+            },
+            border: { DEFAULT: '#21283a', bright: '#2d3a52', glow: '#1e40af44' },
+            brand: { DEFAULT: '#3b82f6', dim: '#1d4ed8', glow: 'rgba(59,130,246,0.15)' },
+            accent: { cyan: '#06b6d4', violet: '#8b5cf6', emerald: '#10b981', rose: '#f43f5e', amber: '#f59e0b' },
+          },
+          backgroundImage: {
+            'grid-pattern': "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M0 0h40v40H0z' fill='none'/%3E%3Cpath d='M0 0h1v40H0zM40 0h1v40H0zM0 0h40v1H0zM0 40h40v1H0z' fill='%2321283a' opacity='.4'/%3E%3C/svg%3E\")",
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s ease-in-out infinite',
+            'float': 'float 6s ease-in-out infinite',
+          },
+          keyframes: {
+            float: { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-6px)' } },
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="stylesheet" href="/static/css/styles.css" />
+
+  <style>
+    .tracker-card {
+      background: #161b27;
+      border: 1px solid #21283a;
+      border-radius: 16px;
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .tracker-card:hover {
+      border-color: #2d3a52;
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.15), 0 8px 24px rgba(0,0,0,0.3);
+      transform: translateY(-2px);
+    }
+    .tracker-card.inactive {
+      opacity: 0.55;
+      cursor: default;
+    }
+    .tracker-card.inactive:hover {
+      transform: none;
+      box-shadow: none;
+    }
+    .add-card {
+      background: transparent;
+      border: 1px dashed #2d3a52;
+      border-radius: 16px;
+      transition: border-color 0.2s, background 0.2s;
+      cursor: pointer;
+    }
+    .add-card:hover {
+      border-color: #3b82f6;
+      background: rgba(59,130,246,0.04);
+    }
+    .pill-active { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.25); }
+    .pill-inactive { background: rgba(100,116,139,0.15); color: #94a3b8; border: 1px solid rgba(100,116,139,0.2); }
+    .pill-past { background: rgba(244,63,94,0.12); color: #fb7185; border: 1px solid rgba(244,63,94,0.2); }
+    .progress-bar { height: 3px; border-radius: 2px; background: #21283a; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #3b82f6, #06b6d4); transition: width 0.4s; }
+    .modal-overlay { background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); }
+    .input-field {
+      background: #1c2333;
+      border: 1px solid #21283a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      outline: none;
+      width: 100%;
+      transition: border-color 0.2s;
+    }
+    .input-field:focus { border-color: #3b82f6; }
+    .btn-primary { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border-radius: 10px; font-weight: 600; transition: opacity 0.2s, transform 0.1s; }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-ghost { background: #1c2333; border: 1px solid #21283a; color: #94a3b8; border-radius: 8px; transition: background 0.2s, color 0.2s; }
+    .btn-ghost:hover { background: #21283a; color: #e2e8f0; }
+    .btn-danger { background: rgba(244,63,94,0.12); border: 1px solid rgba(244,63,94,0.25); color: #fb7185; border-radius: 8px; transition: background 0.2s; }
+    .btn-danger:hover { background: rgba(244,63,94,0.2); }
+  </style>
+</head>
+<body class="bg-surface text-slate-200 min-h-screen antialiased" style="font-family: 'Inter', sans-serif;">
+
+  <!-- Ambient background -->
+  <div class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+    <div class="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full opacity-[0.04]" style="background: radial-gradient(circle, #3b82f6, transparent 70%);"></div>
+    <div class="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full opacity-[0.05]" style="background: radial-gradient(circle, #8b5cf6, transparent 70%);"></div>
+    <div class="absolute inset-0 bg-grid-pattern opacity-40"></div>
+  </div>
+
+  <!-- ═══════════════════════════════ HEADER ═══════════════════════════════ -->
+  <header class="sticky top-0 z-50 border-b border-border backdrop-blur-xl" style="background: rgba(10,13,20,0.85);">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[60px] flex items-center justify-between gap-4">
+
+      <!-- Logo -->
+      <a href="/" class="flex items-center gap-3 flex-shrink-0">
+        <div class="relative w-8 h-8 flex-shrink-0">
+          <div class="absolute inset-0 rounded-lg bg-gradient-to-tr from-blue-600 to-cyan-400 opacity-80 blur-[6px]"></div>
+          <div class="relative w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-cyan-400 flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path d="M22 16.5H2M5 12l3-4.5L12 10l4-6 4 6.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+        <div class="hidden sm:block">
+          <span class="text-[15px] font-bold tracking-tight text-white">AeroTrack</span>
+          <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 align-middle">BETA</span>
+        </div>
+      </a>
+
+      <!-- Right controls -->
+      <div class="flex items-center gap-2 sm:gap-3">
+
+        <!-- Schedule info -->
+        <div class="hidden sm:flex items-center gap-1.5 text-[11px] text-slate-500 bg-surface-2 border border-border rounded-full px-3 py-1">
+          <svg class="w-3 h-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round"/>
+          </svg>
+          <span id="scheduleLabel">{{ scrape_times_ist }} IST · 3×/day</span>
+        </div>
+
+        <!-- BrightData badge -->
+        <div id="bdBadge" class="hidden sm:flex items-center gap-1.5 text-[11px] font-medium px-3 py-1 rounded-full border border-border bg-surface-2 text-slate-400">
+          <span id="bdDot" class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse-slow"></span>
+          <span id="bdLabel">Checking...</span>
+        </div>
+
+        <!-- Next scrape -->
+        <div class="hidden sm:block text-[11px] text-slate-500">
+          Next: <span id="nextCheck" class="text-slate-300 font-medium font-mono">--</span>
+        </div>
+
+        <!-- Manual trigger -->
+        <button id="triggerBtn" onclick="triggerScrape()" class="btn-primary flex items-center gap-1.5 text-xs px-3.5 py-2 font-semibold">
+          <svg id="triggerIcon" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span id="triggerLabel">Scrape Now</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════ MAIN ═══════════════════════════════ -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+
+    <!-- Page title -->
+    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+      <div>
+        <h1 class="text-2xl font-bold text-white tracking-tight">Date Trackers</h1>
+        <p class="text-sm text-slate-500 mt-1">Track flight prices for up to <span class="text-white font-medium">{{ max_trackers }}</span> dates. Scraped <span class="text-white font-medium">{{ max_scrapes_per_day }}×</span> daily at <span class="text-white font-medium">{{ scrape_times_ist }} IST</span>.</p>
+      </div>
+      <div class="flex items-center gap-2 text-[12px] text-slate-500">
+        <span id="activeCountLabel" class="font-medium text-white">—</span> / {{ max_trackers }} active slots used
+      </div>
+    </div>
+
+    <!-- Stats strip -->
+    <div id="statsStrip" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+      <!-- Populated by JS -->
+    </div>
+
+    <!-- Tracker grid -->
+    <div id="trackerGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <!-- Loading state -->
+      <div id="gridLoading" class="col-span-full flex justify-center items-center py-20 text-slate-600 text-sm gap-3">
+        <svg class="w-5 h-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+        </svg>
+        Loading trackers...
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ═══════════════════════════════ ADD TRACKER MODAL ═══════════════════════════════ -->
+  <div id="addModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay">
+    <div class="bg-surface-2 border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between">
+        <h3 class="font-semibold text-white text-base flex items-center gap-2">
+          <span class="w-5 h-5 rounded-md bg-blue-500/20 flex items-center justify-center">
+            <svg class="w-3 h-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4" stroke-linecap="round"/></svg>
+          </span>
+          Add Date Tracker
+        </h3>
+        <button onclick="closeAddModal()" class="w-7 h-7 rounded-lg bg-surface-3 hover:bg-surface-4 flex items-center justify-center text-slate-400 hover:text-white transition">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="text-[12px] text-slate-400 font-medium block mb-1.5">Flight Date <span class="text-rose-400">*</span></label>
+          <input type="date" id="addDateInput" class="input-field font-mono" />
+          <p class="text-[11px] text-slate-600 mt-1">Must be a future date. Prices for all 4 routes will be tracked.</p>
+        </div>
+        <div>
+          <label class="text-[12px] text-slate-400 font-medium block mb-1.5">Label <span class="text-slate-600 font-normal">(optional)</span></label>
+          <input type="text" id="addLabelInput" placeholder="e.g. Diwali trip, work conf..." class="input-field" maxlength="128" />
+        </div>
+      </div>
+
+      <div id="addModalError" class="hidden text-[12px] text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2"></div>
+
+      <div class="flex gap-3 pt-1">
+        <button onclick="closeAddModal()" class="btn-ghost flex-1 px-4 py-2.5 text-sm font-medium">Cancel</button>
+        <button onclick="submitAddTracker()" id="addSubmitBtn" class="btn-primary flex-1 px-4 py-2.5 text-sm">
+          <span id="addSubmitLabel">Add Tracker</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ DELETE CONFIRM MODAL ═══════════════════════════════ -->
+  <div id="deleteModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay">
+    <div class="bg-surface-2 border border-border rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+      <div>
+        <h3 class="font-semibold text-white text-base">Delete tracker?</h3>
+        <p class="text-[13px] text-slate-400 mt-1.5">This removes the tracker. Historical price data for <span id="deleteModalDate" class="text-white font-medium"></span> is preserved.</p>
+      </div>
+      <div class="flex gap-3 pt-1">
+        <button onclick="closeDeleteModal()" class="btn-ghost flex-1 px-4 py-2.5 text-sm font-medium">Cancel</button>
+        <button onclick="confirmDelete()" class="btn-danger flex-1 px-4 py-2.5 text-sm font-semibold">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 hidden">
+    <div id="toastInner" class="flex items-center gap-3 px-4 py-3 rounded-xl border border-border shadow-2xl text-sm font-medium bg-surface-2 text-white backdrop-blur-md">
+      <span id="toastIcon"></span>
+      <span id="toastMsg"></span>
+    </div>
+  </div>
+
+  <script>
+    // ─── State ────────────────────────────────────────────────────────────────
+    let trackers = [];
+    let deleteTargetId = null;
+    const MAX_TRACKERS = {{ max_trackers }};
+
+    // ─── Init ─────────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+      loadStatus();
+      loadTrackers();
+      // Set min date on add input to tomorrow
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      document.getElementById('addDateInput').min = tomorrow.toISOString().split('T')[0];
+    });
+
+    // ─── API helpers ──────────────────────────────────────────────────────────
+    async function api(path, opts = {}) {
+      const r = await fetch('/api' + path, opts);
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ detail: r.statusText }));
+        throw new Error(err.detail || r.statusText);
+      }
+      return r.json();
+    }
+
+    // ─── Status bar ───────────────────────────────────────────────────────────
+    async function loadStatus() {
+      try {
+        const s = await api('/status');
+        // BrightData badge
+        const bdBadge = document.getElementById('bdBadge');
+        const bdDot = document.getElementById('bdDot');
+        const bdLabel = document.getElementById('bdLabel');
+        bdBadge.classList.remove('hidden');
+        if (s.brightdata?.active) {
+          bdDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400';
+          bdLabel.textContent = `BrightData (${s.brightdata.mode})`;
+        } else {
+          bdDot.className = 'w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse-slow';
+          bdLabel.textContent = 'Direct (no proxy)';
+        }
+        // Next run
+        if (s.next_run_at) {
+          const d = new Date(s.next_run_at);
+          document.getElementById('nextCheck').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        // Stats strip
+        renderStatsStrip(s);
+      } catch(e) {
+        console.error('Status error:', e);
+      }
+      setTimeout(loadStatus, 60000);
+    }
+
+    function renderStatsStrip(s) {
+      const strip = document.getElementById('statsStrip');
+      const items = [
+        { label: 'Active Trackers', value: `${s.active_trackers} / ${s.max_active_trackers}`, color: 'text-blue-400', icon: '📅' },
+        { label: 'Total Records', value: s.total_records?.toLocaleString() ?? '—', color: 'text-emerald-400', icon: '🗄️' },
+        { label: 'Routes Tracked', value: s.routes_count ?? '—', color: 'text-violet-400', icon: '✈️' },
+        { label: 'Last Run', value: s.last_job_run?.status ?? '—', color: s.last_job_run?.status === 'success' ? 'text-emerald-400' : 'text-amber-400', icon: '⏱️' },
+      ];
+      strip.innerHTML = items.map(it => `
+        <div class="bg-surface-2 border border-border rounded-xl px-4 py-3.5 flex items-center gap-3">
+          <span class="text-xl">${it.icon}</span>
+          <div>
+            <div class="${it.color} font-bold text-lg font-mono leading-tight">${it.value}</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">${it.label}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ─── Load & render trackers ───────────────────────────────────────────────
+    async function loadTrackers() {
+      try {
+        trackers = await api('/trackers');
+        renderTrackers();
+      } catch(e) {
+        document.getElementById('trackerGrid').innerHTML = `
+          <div class="col-span-full text-center py-16 text-rose-400 text-sm">${e.message}</div>`;
+      }
+    }
+
+    function renderTrackers() {
+      const grid = document.getElementById('trackerGrid');
+      const loading = document.getElementById('gridLoading');
+      if (loading) loading.remove();
+
+      const active = trackers.filter(t => t.is_active);
+      document.getElementById('activeCountLabel').textContent = active.length;
+
+      // Sort: active first by date, then inactive
+      const sorted = [
+        ...trackers.filter(t => t.is_active).sort((a,b) => a.flight_date.localeCompare(b.flight_date)),
+        ...trackers.filter(t => !t.is_active).sort((a,b) => b.flight_date.localeCompare(a.flight_date))
+      ];
+
+      let html = '';
+
+      // Render existing tracker cards
+      for (const t of sorted) {
+        html += renderTrackerCard(t);
+      }
+
+      // Add slot card if under cap
+      if (active.length < MAX_TRACKERS) {
+        html += `
+          <div class="add-card p-6 flex flex-col items-center justify-center gap-3 min-h-[200px]"
+               onclick="openAddModal()">
+            <div class="w-10 h-10 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+              <svg class="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="text-center">
+              <p class="text-sm font-medium text-slate-300">Add Tracker</p>
+              <p class="text-[11px] text-slate-600 mt-0.5">${MAX_TRACKERS - active.length} slot${MAX_TRACKERS - active.length !== 1 ? 's' : ''} remaining</p>
+            </div>
+          </div>`;
+      }
+
+      // If 0 trackers and no add slot (shouldn't happen but safety)
+      if (trackers.length === 0 && active.length >= MAX_TRACKERS) {
+        html = `<div class="col-span-full text-center py-20 text-slate-600 text-sm">No trackers yet.</div>`;
+      }
+
+      grid.innerHTML = html;
+    }
+
+    function renderTrackerCard(t) {
+      const today = new Date().toISOString().split('T')[0];
+      const isPast = t.flight_date < today;
+      const daysUntil = Math.ceil((new Date(t.flight_date) - new Date(today)) / 86400000);
+
+      let pillClass = 'pill-active';
+      let pillText = 'Active';
+      if (!t.is_active) {
+        pillClass = isPast ? 'pill-past' : 'pill-inactive';
+        pillText = isPast ? 'Expired' : 'Paused';
+      }
+
+      const scrapeProgress = t.max_scrapes_per_day > 0
+        ? Math.round((t.scrapes_today / t.max_scrapes_per_day) * 100)
+        : 0;
+
+      const dateLabel = new Date(t.flight_date + 'T00:00:00').toLocaleDateString('en-IN', {
+        weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+      });
+
+      const lastScrape = t.last_scrape_at
+        ? new Date(t.last_scrape_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })
+        : 'Never';
+
+      const cardClickable = t.is_active ? `onclick="openDashboard('${t.flight_date}')"` : '';
+      const inactiveClass = t.is_active ? '' : 'inactive';
+
+      return `
+        <div class="tracker-card ${inactiveClass} p-5 space-y-4" ${cardClickable}>
+          <!-- Top row: date + status pill -->
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="text-[11px] text-slate-500 font-medium uppercase tracking-widest mb-0.5">Flight Date</div>
+              <div class="text-white font-bold text-lg font-mono leading-tight">${t.flight_date}</div>
+              <div class="text-[12px] text-slate-500 mt-0.5">${dateLabel}</div>
+            </div>
+            <span class="text-[10px] font-semibold px-2 py-1 rounded-full flex-shrink-0 ${pillClass}">${pillText}</span>
+          </div>
+
+          ${t.label ? `<div class="text-[13px] text-blue-300 font-medium truncate" title="${t.label}">🏷️ ${t.label}</div>` : ''}
+
+          <!-- Days until + price -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="bg-surface-3 rounded-xl p-3">
+              <div class="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Days Until</div>
+              <div class="text-white font-bold text-xl font-mono">${isPast ? '—' : daysUntil}</div>
+            </div>
+            <div class="bg-surface-3 rounded-xl p-3">
+              <div class="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Lowest Found</div>
+              <div class="font-bold text-lg ${t.lowest_price ? 'text-emerald-400 font-mono' : 'text-slate-600'}">
+                ${t.lowest_price ? '₹' + t.lowest_price.toLocaleString('en-IN') : '—'}
+              </div>
+            </div>
+          </div>
+
+          <!-- Scrape progress -->
+          <div>
+            <div class="flex justify-between items-center mb-1.5">
+              <span class="text-[10px] text-slate-500">Today's scrapes</span>
+              <span class="text-[10px] font-mono text-slate-400">${t.scrapes_today}/${t.max_scrapes_per_day}</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: ${scrapeProgress}%"></div>
+            </div>
+          </div>
+
+          <!-- Last scrape + records -->
+          <div class="flex justify-between text-[11px] text-slate-500">
+            <span>Last scraped: <span class="text-slate-400">${lastScrape}</span></span>
+            <span class="text-slate-400">${t.total_records} records</span>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex gap-2 pt-1 border-t border-border" onclick="event.stopPropagation()">
+            ${t.is_active ? `
+              <button onclick="deactivateTracker(${t.id})"
+                class="btn-ghost flex-1 text-[11px] px-3 py-1.5 font-medium">Pause</button>
+            ` : `
+              <button onclick="activateTracker(${t.id})"
+                class="btn-ghost flex-1 text-[11px] px-3 py-1.5 font-medium">Activate</button>
+            `}
+            <button onclick="openDeleteModal(${t.id}, '${t.flight_date}')"
+              class="btn-danger text-[11px] px-3 py-1.5 font-medium">Delete</button>
+            ${t.is_active ? `
+              <button onclick="openDashboard('${t.flight_date}')"
+                class="btn-primary text-[11px] px-3 py-1.5 font-medium flex-1">View →</button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function openDashboard(flightDate) {
+      window.location.href = `/dashboard?date=${flightDate}`;
+    }
+
+    // ─── Add tracker modal ────────────────────────────────────────────────────
+    function openAddModal() {
+      document.getElementById('addModal').classList.remove('hidden');
+      document.getElementById('addModal').classList.add('flex');
+      document.getElementById('addModalError').classList.add('hidden');
+      document.getElementById('addDateInput').value = '';
+      document.getElementById('addLabelInput').value = '';
+      document.getElementById('addDateInput').focus();
+    }
+
+    function closeAddModal() {
+      document.getElementById('addModal').classList.add('hidden');
+      document.getElementById('addModal').classList.remove('flex');
+    }
+
+    async function submitAddTracker() {
+      const dateVal = document.getElementById('addDateInput').value;
+      const labelVal = document.getElementById('addLabelInput').value.trim();
+      const errEl = document.getElementById('addModalError');
+      const btn = document.getElementById('addSubmitBtn');
+      const btnLabel = document.getElementById('addSubmitLabel');
+
+      errEl.classList.add('hidden');
+
+      if (!dateVal) {
+        errEl.textContent = 'Please select a flight date.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btnLabel.textContent = 'Adding...';
+
+      try {
+        await api('/trackers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ flight_date: dateVal, label: labelVal || null })
+        });
+        closeAddModal();
+        showToast('✅', `Tracker added for ${dateVal}`);
+        await loadTrackers();
+        await loadStatus();
+      } catch(e) {
+        errEl.textContent = e.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btnLabel.textContent = 'Add Tracker';
+      }
+    }
+
+    // ─── Delete modal ─────────────────────────────────────────────────────────
+    function openDeleteModal(id, flightDate) {
+      deleteTargetId = id;
+      document.getElementById('deleteModalDate').textContent = flightDate;
+      document.getElementById('deleteModal').classList.remove('hidden');
+      document.getElementById('deleteModal').classList.add('flex');
+    }
+
+    function closeDeleteModal() {
+      deleteTargetId = null;
+      document.getElementById('deleteModal').classList.add('hidden');
+      document.getElementById('deleteModal').classList.remove('flex');
+    }
+
+    async function confirmDelete() {
+      if (!deleteTargetId) return;
+      try {
+        await api(`/trackers/${deleteTargetId}`, { method: 'DELETE' });
+        closeDeleteModal();
+        showToast('🗑️', 'Tracker deleted');
+        await loadTrackers();
+        await loadStatus();
+      } catch(e) {
+        showToast('❌', e.message, true);
+      }
+    }
+
+    // ─── Activate / deactivate ────────────────────────────────────────────────
+    async function deactivateTracker(id) {
+      try {
+        await api(`/trackers/${id}/deactivate`, { method: 'PATCH' });
+        showToast('⏸️', 'Tracker paused');
+        await loadTrackers();
+        await loadStatus();
+      } catch(e) {
+        showToast('❌', e.message, true);
+      }
+    }
+
+    async function activateTracker(id) {
+      try {
+        await api(`/trackers/${id}/activate`, { method: 'PATCH' });
+        showToast('▶️', 'Tracker activated');
+        await loadTrackers();
+        await loadStatus();
+      } catch(e) {
+        showToast('❌', e.message, true);
+      }
+    }
+
+    // ─── Manual scrape trigger ────────────────────────────────────────────────
+    async function triggerScrape() {
+      const btn = document.getElementById('triggerBtn');
+      const icon = document.getElementById('triggerIcon');
+      const label = document.getElementById('triggerLabel');
+      btn.disabled = true;
+      icon.classList.add('animate-spin');
+      label.textContent = 'Running...';
+      try {
+        const res = await api('/scrape/trigger', { method: 'POST' });
+        showToast('🚀', res.message || 'Scrape triggered');
+      } catch(e) {
+        showToast('❌', e.message, true);
+      } finally {
+        setTimeout(() => {
+          btn.disabled = false;
+          icon.classList.remove('animate-spin');
+          label.textContent = 'Scrape Now';
+          loadTrackers();
+          loadStatus();
+        }, 3000);
+      }
+    }
+
+    // ─── Toast ────────────────────────────────────────────────────────────────
+    let toastTimer;
+    function showToast(icon, msg, isError = false) {
+      clearTimeout(toastTimer);
+      document.getElementById('toastIcon').textContent = icon;
+      document.getElementById('toastMsg').textContent = msg;
+      const inner = document.getElementById('toastInner');
+      inner.className = `flex items-center gap-3 px-4 py-3 rounded-xl border shadow-2xl text-sm font-medium backdrop-blur-md ${
+        isError
+          ? 'bg-rose-950/80 border-rose-700/50 text-rose-200'
+          : 'bg-surface-2 border-border text-white'
+      }`;
+      const toast = document.getElementById('toast');
+      toast.classList.remove('hidden');
+      toastTimer = setTimeout(() => toast.classList.add('hidden'), 4000);
+    }
+
+    // Close modals on backdrop click
+    document.getElementById('addModal').addEventListener('click', e => {
+      if (e.target === document.getElementById('addModal')) closeAddModal();
+    });
+    document.getElementById('deleteModal').addEventListener('click', e => {
+      if (e.target === document.getElementById('deleteModal')) closeDeleteModal();
+    });
+
+    // Enter key submits add modal
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { closeAddModal(); closeDeleteModal(); }
+      if (e.key === 'Enter' && !document.getElementById('addModal').classList.contains('hidden')) {
+        submitAddTracker();
+      }
+    });
+  </script>
+</body>
+</html>

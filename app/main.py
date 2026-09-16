@@ -24,12 +24,12 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing flight tracker database...")
     await init_db()
 
-    logger.info("Starting background hourly scheduler...")
+    logger.info("Starting background daily scrape scheduler...")
     scheduler_instance.start()
 
     if settings.RUN_SCRAPE_ON_STARTUP:
         logger.info("Scheduling initial scrape run on startup...")
-        asyncio.create_task(scheduler_instance.run_hourly_scrape())
+        asyncio.create_task(scheduler_instance.run_scrape_cycle())
 
     yield
 
@@ -39,9 +39,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Flight Price Tracker",
-    description="Real-time and historical Google Flights price tracking with BrightData IP protection.",
-    version="1.0.0",
+    title="AeroTrack — Flight Price Intelligence",
+    description="Multi-date flight price tracking with per-day scrape scheduling and BrightData IP protection.",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -54,8 +54,26 @@ app.include_router(api_router)
 
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_dashboard(request: Request):
-    """Serves the main interactive dashboard."""
+async def serve_trackers(request: Request):
+    """Serves the tracker landing page — shows all date trackers, allows add/remove."""
+    return templates.TemplateResponse(
+        request=request,
+        name="trackers.html",
+        context={
+            "currency": settings.DEFAULT_CURRENCY,
+            "max_trackers": settings.MAX_ACTIVE_TRACKERS,
+            "max_scrapes_per_day": settings.MAX_SCRAPES_PER_DAY,
+            "scrape_times_ist": settings.SCRAPE_TIMES_IST,
+        }
+    )
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def serve_dashboard(request: Request, date: str = ""):
+    """
+    Serves the flight price dashboard for a specific tracked date.
+    The ?date=YYYY-MM-DD query param is forwarded to the JS so it can auto-filter.
+    """
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -63,7 +81,8 @@ async def serve_dashboard(request: Request):
             "routes": settings.ROUTES,
             "currency": settings.DEFAULT_CURRENCY,
             "has_brightdata": settings.has_bright_data,
-            "zone": settings.BRIGHT_DATA_ZONE
+            "zone": settings.BRIGHT_DATA_ZONE,
+            "flight_date": date,   # passed to template for JS bootstrap
         }
     )
 
@@ -71,4 +90,4 @@ async def serve_dashboard(request: Request):
 @app.get("/health")
 async def health_check():
     """Healthcheck endpoint for Coolify / Docker Compose."""
-    return {"status": "ok", "service": "flight_tracker"}
+    return {"status": "ok", "service": "flight_tracker", "version": "2.0.0"}
